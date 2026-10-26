@@ -11,21 +11,30 @@ export function KsFigure({
   tall?: boolean
 }) {
   const w = 640
-  const h = tall ? 360 : 120
-  const m = { l: 28, r: 8, t: 8, b: 18 }
+  const h = tall ? 320 : 132
+  const m = { l: 28, r: 10, t: 8, b: 16 }
   const iw = w - m.l - m.r
   const ih = h - m.t - m.b
   const x = (t: number) => m.l + t * iw
   const y = (v: number) => m.t + (1 - v) * ih
   const path = (key: "events" | "nonEvents") =>
     curve.map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.t)} ${y(point[key])}`).join(" ")
+  const at = curve.reduce((best, point) => (Math.abs(point.t - ksAt) < Math.abs(best.t - ksAt) ? point : best), curve[0])
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="h-full w-full" data-testid={tall ? "ks-curve" : "ks-mini"}>
       <line x1={m.l} x2={w - m.r} y1={y(0)} y2={y(0)} stroke="#c4c5d7" />
-      <line x1={m.l} x2={m.l} y1={m.t} y2={y(0)} stroke="#c4c5d7" />
-      <path d={path("nonEvents")} fill="none" stroke="#0037b0" strokeWidth="1.8" />
-      <path d={path("events")} fill="none" stroke="#a83300" strokeWidth="1.8" />
-      <line x1={x(ksAt)} x2={x(ksAt)} y1={m.t} y2={y(0)} stroke="#141b2b" strokeDasharray="3 3" />
+      <path d={path("nonEvents")} fill="none" stroke="#0037b0" strokeWidth="1.6" />
+      <path d={path("events")} fill="none" stroke="#a83300" strokeWidth="1.6" />
+      {at && (
+        <line
+          x1={x(at.t)}
+          x2={x(at.t)}
+          y1={y(at.nonEvents)}
+          y2={y(at.events)}
+          stroke="#141b2b"
+          strokeDasharray="3 2"
+        />
+      )}
     </svg>
   )
 }
@@ -33,17 +42,19 @@ export function KsFigure({
 export function Silhouette({
   bins,
   tall = false,
+  cutoff,
 }: {
   bins: HistBin[]
   tall?: boolean
+  cutoff?: number
 }) {
   const w = 640
-  const h = tall ? 220 : 88
-  const m = { l: 8, r: 8, t: 8, b: 8 }
+  const h = tall ? 200 : 72
+  const m = { l: 4, r: 4, t: 6, b: 4 }
   const iw = w - m.l - m.r
   const ih = h - m.t - m.b
   const max = Math.max(...bins.map((bin) => Math.max(bin.events, bin.nonEvents)), 1)
-  const step = iw / bins.length
+  const step = iw / Math.max(1, bins.length)
   const area = (key: "events" | "nonEvents") => {
     const pts = bins.map((bin, index) => {
       const px = m.l + index * step + step / 2
@@ -52,10 +63,14 @@ export function Silhouette({
     })
     return `M ${m.l} ${m.t + ih} L ${pts.join(" L ")} L ${m.l + iw} ${m.t + ih} Z`
   }
+  const span = bins.length ? bins[bins.length - 1].hi - bins[0].lo : 1
+  const cutX =
+    cutoff == null || !bins.length ? null : m.l + Math.min(1, Math.max(0, (cutoff - bins[0].lo) / (span || 1))) * iw
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="h-full w-full" data-testid={tall ? "score-histogram" : "score-silhouette"}>
-      <path d={area("nonEvents")} fill="#1d4ed8" opacity="0.45" />
-      <path d={area("events")} fill="#a83300" opacity="0.55" />
+      <path d={area("nonEvents")} fill="#dce1ff" />
+      <path d={area("events")} fill="#a83300" opacity="0.45" />
+      {cutX != null && <line x1={cutX} x2={cutX} y1={m.t} y2={m.t + ih} stroke="#0037b0" strokeDasharray="3 2" />}
     </svg>
   )
 }

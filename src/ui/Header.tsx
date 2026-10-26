@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react"
-import { fmtInt } from "../format"
 import { useLab } from "../state/lab"
 import type { Section } from "../state/useScorecard"
 
@@ -31,23 +30,42 @@ export function Header() {
   const ms = lab.model.ms < 1 ? "<1 ms" : `${Math.round(lab.model.ms)} ms`
 
   return (
-    <header className="shrink-0 border-b border-outline-variant bg-surface">
-      <div className="flex h-12 items-center gap-4 px-4">
-        <div className="flex items-center gap-2">
-          <span className="h-4 w-4 bg-primary" />
-          <span className="font-display text-[1.45rem] leading-none tracking-tight">ScorecardLab</span>
+    <header className="z-30 h-14 shrink-0 border-b border-outline-variant bg-surface-container-lowest/95 backdrop-blur-md">
+      <div className="mx-auto flex h-full max-w-[1440px] items-center gap-3 px-gutter">
+        <div className="grid h-5 w-5 shrink-0 place-items-center border border-on-surface">
+          <span className="h-2 w-2 bg-on-surface" />
         </div>
-        <span className="h-6 w-px bg-outline-variant" />
-        <button
-          type="button"
-          data-testid="dataset-button"
-          className="text-left"
-          onClick={() => fileRef.current?.click()}
-          title="Upload a UTF-8 CSV"
-        >
-          <div className="font-label-caps text-[10px] tracking-[0.12em] text-secondary">Dataset</div>
-          <div className="font-numeric-data text-[12px] leading-none">{lab.dataset.name}</div>
-        </button>
+        <span className="shrink-0 font-label-caps text-[12px] tracking-[0.18em] text-on-surface">SCORECARDLAB</span>
+        <span className="h-4 w-px shrink-0 bg-outline-variant" />
+        <div className="flex min-w-0 items-center gap-1.5 font-numeric-data text-[11px] text-secondary">
+          <button type="button" data-testid="dataset-button" className="truncate" onClick={() => fileRef.current?.click()} title="Upload a UTF-8 CSV">
+            DATA <span className="text-on-surface">{lab.dataset.name}</span>
+          </button>
+          <span aria-hidden>·</span>
+          <span className="truncate">
+            TARGET{" "}
+            {lab.candidates.length > 1 ? (
+              <select
+                data-testid="target-select"
+                value={lab.dataset.target}
+                onChange={(event) => lab.onTarget(event.target.value)}
+                className="bg-transparent font-numeric-data text-[11px] text-on-surface outline-none"
+              >
+                {lab.candidates.map((name) => (
+                  <option key={name}>{name}</option>
+                ))}
+              </select>
+            ) : (
+              <span data-testid="target-name" className="text-on-surface">
+                {lab.dataset.target}
+              </span>
+            )}
+          </span>
+          <span aria-hidden>·</span>
+          <span data-testid="engine-chip" className="shrink-0" title="JavaScript engine. Timing is measured in this browser.">
+            ENGINE <span className="text-primary">JS</span> {lab.slow ? "recalculating" : ms}
+          </span>
+        </div>
         <input
           ref={fileRef}
           data-testid="file-input"
@@ -60,53 +78,39 @@ export function Header() {
             event.target.value = ""
           }}
         />
-        <div>
-          <div className="font-label-caps text-[10px] tracking-[0.12em] text-secondary">Target</div>
-          {lab.candidates.length > 1 ? (
-            <select
-              data-testid="target-select"
-              value={lab.dataset.target}
-              onChange={(event) => lab.onTarget(event.target.value)}
-              className="bg-transparent font-numeric-data text-[12px] leading-none outline-none"
-            >
-              {lab.candidates.map((name) => (
-                <option key={name}>{name}</option>
-              ))}
-            </select>
-          ) : (
-            <div data-testid="target-name" className="font-numeric-data text-[12px] leading-none">
-              {lab.dataset.target}
-            </div>
-          )}
-        </div>
-        <div
-          data-testid="engine-chip"
-          className="flex items-center gap-2 border border-outline-variant px-2 py-1"
-          title="JavaScript engine. Timing is measured in this browser."
-        >
-          <span className={`h-1.5 w-1.5 ${lab.slow ? "bg-tertiary" : "bg-primary"}`} />
-          <span className="font-label-caps text-[10px] tracking-[0.14em] text-primary">JS</span>
-          <span className="font-numeric-data text-[12px]">{lab.slow ? "Recalculating" : ms}</span>
-        </div>
-        <div className="ml-auto flex items-center gap-2" ref={menuRef}>
-          <span className="hidden font-numeric-data text-[11px] text-secondary xl:inline">
-            {fmtInt(lab.dataset.rowCount)} rows
-          </span>
+        <nav className="ml-auto flex items-center gap-0.5">
+          {NAV.map((item, index) => {
+            const on = lab.section === item.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                data-testid={item.test}
+                onClick={() => lab.setSection(item.id)}
+                className={`whitespace-nowrap rounded px-2 py-1 font-body-sm text-[12px] ${
+                  on ? "bg-surface-container-highest text-on-surface" : "text-secondary hover:bg-surface-container"
+                }`}
+              >
+                {String(index + 1).padStart(2, "0")} / {item.label}
+              </button>
+            )
+          })}
+        </nav>
+        <div className="flex shrink-0 items-center gap-3" ref={menuRef}>
           <div className="relative">
             <button
               type="button"
               data-testid="preset-btn"
-              className="inline-flex items-center gap-1 border border-outline-variant px-2.5 py-1.5 font-label-caps text-[10px] tracking-[0.12em]"
+              className="font-body-sm text-[13px] text-secondary hover:text-on-surface"
               onClick={() => {
                 setPresetsOpen((open) => !open)
                 setExportOpen(false)
               }}
             >
-              <span className="material-symbols-outlined">tune</span>
               Presets
             </button>
             {presetsOpen && (
-              <div className="absolute right-0 z-20 mt-1 w-64 border border-outline-variant bg-surface-container-lowest shadow-none">
+              <div className="absolute right-0 z-20 mt-2 w-64 border border-outline-variant bg-surface-container-lowest">
                 <button
                   type="button"
                   data-testid="preset-defaults"
@@ -116,8 +120,8 @@ export function Header() {
                     setPresetsOpen(false)
                   }}
                 >
-                  <div className="font-headline-sm text-[13px]">Spec defaults</div>
-                  <div className="text-body-sm text-secondary">Min bin 5%, PDO 20, score 600, odds 50:1</div>
+                  <div className="font-body-sm text-on-surface">Spec defaults</div>
+                  <div className="font-numeric-data text-[11px] text-secondary">Min bin 5% · PDO 20 · 600 · 50:1</div>
                 </button>
                 <button
                   type="button"
@@ -128,8 +132,8 @@ export function Header() {
                     setPresetsOpen(false)
                   }}
                 >
-                  <div className="font-headline-sm text-[13px]">Stricter minimum bin</div>
-                  <div className="text-body-sm text-secondary">Min bin 10%, at most 4 bins</div>
+                  <div className="font-body-sm text-on-surface">Stricter minimum bin</div>
+                  <div className="font-numeric-data text-[11px] text-secondary">Min bin 10% · at most 4 bins</div>
                 </button>
               </div>
             )}
@@ -138,51 +142,30 @@ export function Header() {
             <button
               type="button"
               data-testid="export-btn"
-              className="inline-flex items-center gap-1 bg-primary px-2.5 py-1.5 font-label-caps text-[10px] tracking-[0.12em] text-on-primary"
+              className="font-body-sm text-[13px] text-secondary hover:text-on-surface"
               onClick={() => {
                 setExportOpen((open) => !open)
                 setPresetsOpen(false)
               }}
             >
-              <span className="material-symbols-outlined">download</span>
               Export
             </button>
             {exportOpen && (
-              <div className="absolute right-0 z-20 mt-1 w-56 border border-outline-variant bg-surface-container-lowest">
+              <div className="absolute right-0 z-20 mt-2 w-56 border border-outline-variant bg-surface-container-lowest">
                 <ExportItem testId="export-json" label="Cut-points JSON" onClick={lab.exportJson} />
                 <ExportItem testId="export-cuts-csv" label="Cut-points CSV" onClick={lab.exportCutsCsv} />
                 <ExportItem testId="export-points" label="Points CSV" onClick={lab.exportPoints} />
                 <ExportItem testId="export-python" label="Python snippet" onClick={lab.exportPython} />
-                <ExportItem testId="export-dossier" label="Dossier · session record" onClick={lab.exportDossier} />
+                <ExportItem testId="export-dossier" label="Session record" onClick={lab.exportDossier} />
               </div>
             )}
           </div>
-          <div
-            className="grid h-8 w-8 place-items-center bg-inverse-surface font-display text-[13px] text-inverse-on-surface"
-            title="Local session"
-          >
-            SL
+          <span className="h-4 w-px bg-outline-variant" />
+          <div className="grid h-8 w-8 place-items-center rounded-[999px] bg-primary text-on-primary" title="Local session">
+            <span className="material-symbols-outlined text-[18px]">person</span>
           </div>
         </div>
       </div>
-      <nav className="flex h-9 items-end gap-1 px-2">
-        {NAV.map((item, index) => {
-          const on = lab.section === item.id
-          return (
-            <button
-              key={item.id}
-              type="button"
-              data-testid={item.test}
-              onClick={() => lab.setSection(item.id)}
-              className={`border-b-2 px-3 pb-2 font-label-caps text-[11px] tracking-[0.08em] ${
-                on ? "border-primary text-primary" : "border-transparent text-secondary"
-              }`}
-            >
-              <span className="font-numeric-data text-[11px]">{String(index + 1).padStart(2, "0")}</span> {item.label}
-            </button>
-          )
-        })}
-      </nav>
     </header>
   )
 }
@@ -192,7 +175,7 @@ function ExportItem({ testId, label, onClick }: { testId: string; label: string;
     <button
       type="button"
       data-testid={testId}
-      className="block w-full border-b border-outline-variant px-3 py-2 text-left text-body-sm last:border-b-0 hover:bg-surface-container"
+      className="block w-full border-b border-outline-variant px-3 py-2 text-left font-body-sm last:border-b-0 hover:bg-surface-container"
       onClick={onClick}
     >
       {label}
@@ -203,14 +186,15 @@ function ExportItem({ testId, label, onClick }: { testId: string; label: string;
 export function Footer() {
   const lab = useLab()
   return (
-    <footer className="flex h-7 shrink-0 items-center justify-between gap-4 bg-inverse-surface px-4 text-inverse-on-surface">
-      <span className="font-label-caps text-[10px] tracking-[0.16em]">ScorecardLab</span>
-      <span className="truncate font-body-sm text-[11px] text-inverse-primary">
-        Client-side monotonic scorecard · The dossier file is a session record, not a certification
-      </span>
-      <span className="font-numeric-data text-[11px]">
-        {lab.dataset.name} · {fmtInt(lab.dataset.rowCount)}
-      </span>
+    <footer className="shrink-0 border-t border-outline-variant bg-surface">
+      <div className="mx-auto flex h-10 max-w-[1440px] items-center justify-between gap-4 px-gutter font-body-sm text-[12px] text-secondary">
+        <span>ScorecardLab Precision Framework</span>
+        <span className="hidden sm:inline">Architecture: Swiss Modern Functionalist</span>
+        <span className="inline-flex items-center gap-2 font-numeric-data text-[11px] text-on-surface">
+          <i className="h-1.5 w-1.5 rounded-[999px] bg-primary" />
+          {lab.dataset.name}
+        </span>
+      </div>
     </footer>
   )
 }
