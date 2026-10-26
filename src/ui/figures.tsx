@@ -107,8 +107,8 @@ export function ProfitCurve({
       {zero != null && <line x1={m.l} x2={w - m.r} y1={zero} y2={zero} stroke="#c4c5d7" strokeDasharray="2 3" />}
       <path d={path("randomProfit")} fill="none" stroke="#747686" strokeWidth="1.2" strokeDasharray="4 3" />
       <path d={path("profit")} fill="none" stroke="#0037b0" strokeWidth="1.8" />
-      <Marker x={x(a.rate)} y={y(a.profit)} label="A" />
-      <Marker x={x(b.rate)} y={y(b.profit)} label="B" />
+      <Marker x={x(a.rate)} y={y(a.profit)} label="A" nudge={Math.abs(a.rate - b.rate) < 0.08 ? -10 : 0} />
+      <Marker x={x(b.rate)} y={y(b.profit)} label="B" nudge={Math.abs(a.rate - b.rate) < 0.08 ? 12 : 0} />
       <text x={m.l} y={h - 6} fill="#515f74" fontSize="10" fontFamily="JetBrains Mono, ui-monospace, monospace">
         0%
       </text>
@@ -119,11 +119,11 @@ export function ProfitCurve({
   )
 }
 
-function Marker({ x, y, label }: { x: number; y: number; label: string }) {
+function Marker({ x, y, label, nudge = 0 }: { x: number; y: number; label: string; nudge?: number }) {
   return (
     <g>
       <circle cx={x} cy={y} r="3.5" fill="#0037b0" />
-      <text x={x + 6} y={y - 6} fill="#0037b0" fontSize="10" fontFamily="Hanken Grotesk, sans-serif">
+      <text x={x + 6} y={y - 6 + nudge} fill="#0037b0" fontSize="10" fontFamily="Hanken Grotesk, sans-serif">
         {label}
       </text>
     </g>
