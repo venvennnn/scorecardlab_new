@@ -16,7 +16,8 @@ export function BinningStudio() {
   const totalEvents = variable.bins.reduce((sum, bin) => sum + bin.events, 0) + (variable.missingBin?.events ?? 0)
   const totalIv = variable.bins.reduce((sum, bin) => sum + bin.iv, 0) + (variable.missingBin?.iv ?? 0)
   const pointValues = [...variable.bins.map((bin) => bin.points), ...(variable.missingBin ? [variable.missingBin.points] : [])]
-  const pointSpread = pointValues.length ? Math.max(...pointValues) - Math.min(...pointValues) : 0
+  const pointMin = pointValues.length ? Math.min(...pointValues) : 0
+  const pointMax = pointValues.length ? Math.max(...pointValues) : 0
   const violations = countViolations(variable)
   const degenerate =
     variable.bins.filter((bin) => bin.count < minCount).length + (variable.missingBin && variable.missingBin.count < minCount ? 1 : 0)
@@ -178,7 +179,9 @@ export function BinningStudio() {
                   <td className="px-2 py-1 text-tertiary">{fmtPct(totalN ? totalEvents / totalN : 0)}</td>
                   <td className="px-2 py-1" />
                   <td className="px-2 py-1">{fmt(totalIv, 3)}</td>
-                  <td className="px-2 py-1">{fmtInt(pointSpread)}</td>
+                  <td className="px-2 py-1" data-testid="ledger-points-range" title="Range across bins. An account takes one bin, so these points are not added down the column.">
+                    {fmtInt(pointMin)}–{fmtInt(pointMax)}
+                  </td>
                 </tr>
               </tfoot>
             </table>
@@ -277,7 +280,7 @@ export function BinningStudio() {
                 <div className="truncate font-body-sm text-[11px]">{item.name}</div>
                 <div className="font-numeric-data text-[11px] text-secondary">{fmt(item.iv, 3)} IV</div>
                 <div className="mt-1 space-y-0.5">
-                  {item.bins.slice(0, 4).map((bin, index) => (
+                  {item.bins.map((bin, index) => (
                     <div key={index} className="flex justify-between font-numeric-data text-[11px]">
                       <span className="text-secondary">{String(index + 1).padStart(2, "0")}</span>
                       <span className="text-primary">{fmtInt(bin.points)}</span>
