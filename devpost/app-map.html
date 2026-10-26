@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>ScorecardLab app map</title>
+  <style>
+    body { font-family: "Iowan Old Style", Palatino, serif; margin: 2rem auto; max-width: 42rem; color: #141b2b; line-height: 1.45; }
+    h1 { font-weight: 400; letter-spacing: -0.02em; }
+    p, li { font-family: "Avenir Next", "Segoe UI", sans-serif; }
+    code { font-family: ui-monospace, monospace; font-size: 0.9em; }
+    svg { width: 100%; height: auto; }
+  </style>
+</head>
+<body>
+  <h1>ScorecardLab</h1>
+  <p>A browser page for a monotonic Weight-of-Evidence scorecard. The dataset stays in memory. The TypeScript engine bins it. React draws the result.</p>
+  <svg viewBox="0 0 640 120" role="img" aria-label="Drag a cut, project it, show the new ledger">
+    <rect x="8" y="36" width="180" height="48" fill="#e9edff" stroke="#0037b0"/>
+    <rect x="230" y="36" width="180" height="48" fill="#ffdbd0" stroke="#802500"/>
+    <rect x="452" y="36" width="180" height="48" fill="#f9f9ff" stroke="#141b2b"/>
+    <path d="M188 60 H230 M410 60 H452" stroke="#141b2b"/>
+    <text x="98" y="64" text-anchor="middle" font-size="13" font-family="sans-serif">Drag a cut</text>
+    <text x="320" y="64" text-anchor="middle" font-size="13" font-family="sans-serif">Project the partition</text>
+    <text x="542" y="64" text-anchor="middle" font-size="13" font-family="sans-serif">Ledger and KS</text>
+  </svg>
+  <p>Reference route, not a tour that was walked live:</p>
+  <ol>
+    <li><code>src/ui/WoeChart.tsx</code> — <code>startDrag</code> turns the pointer into a feature value.</li>
+    <li><code>src/engine/binning.ts</code> — <code>projectRanges</code> picks the nearest strictly monotonic partition that meets the minimum bin size.</li>
+    <li><code>src/engine/scorecard.ts</code> — <code>dragCut</code> rebuilds points and the KS summary the ledger shows.</li>
+  </ol>
+  <h2>To change this, start here</h2>
+  <ul>
+    <li>Defaults for PDO, base score, odds, and the 5% minimum bin: <code>DEFAULT_SETTINGS</code> in <code>src/engine/types.ts</code>.</li>
+    <li>The points formula: <code>allocatePoints</code> in <code>src/engine/stats.ts</code>.</li>
+    <li>Colors and type: <code>tailwind.config.js</code>, copied from the visual reference tokens.</li>
+  </ul>
+  <h2>A practice to reuse</h2>
+  <p>The drag is specified as “the event-rate sequence stays strictly monotonic” in <code>devpost/prd.md</code>, and <code>src/engine/metrics.test.ts</code> checks a bad cut comes back monotonic. Naming the visible result made the projection testable without looking at the chart.</p>
+  <p>Run it again with <code>npm install</code> and <code>npm run dev</code>, then open the URL Vite prints. This map is a snapshot of the source and can drift.</p>
+</body>
+</html>
