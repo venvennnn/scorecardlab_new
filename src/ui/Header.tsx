@@ -41,15 +41,15 @@ export function Header() {
           <button
             type="button"
             data-testid="dataset-button"
-            className="inline-flex max-w-[14rem] items-center gap-1 truncate border border-outline-variant px-1.5 py-0.5 hover:bg-surface-container"
+            className="inline-flex shrink-0 items-center gap-1 border border-outline-variant px-1.5 py-0.5 hover:bg-surface-container"
             onClick={() => fileRef.current?.click()}
             title="Upload a UTF-8 CSV"
           >
             <span className="material-symbols-outlined text-[14px] text-primary">upload</span>
-            DATA <span className="truncate text-on-surface">{lab.dataset.name}</span>
+            DATA <span className="text-on-surface">{lab.dataset.name}</span>
           </button>
           <span aria-hidden>·</span>
-          <span className="truncate">
+          <span className="shrink-0">
             TARGET{" "}
             {lab.candidates.length > 1 ? (
               <select
