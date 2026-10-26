@@ -8,7 +8,7 @@ import {
   pythonSnippet,
   sessionRecord,
 } from "../engine/export"
-import { quantile, thresholdStats } from "../engine/stats"
+import { bookCounts, economicsAtRate, profitCurve, rankByScore } from "../engine/stats"
 import {
   applyAuto,
   applyIsotonic,
@@ -85,8 +85,8 @@ export function useScorecard() {
   const [candidates, setCandidates] = useState<string[]>([initial.dataset.target])
   const [profitGood, setProfitGood] = useState(100)
   const [lossBad, setLossBad] = useState(500)
-  const [threshold1, setThreshold1] = useState<number | null>(null)
-  const [threshold2, setThreshold2] = useState<number | null>(null)
+  const [accept1, setAccept1State] = useState(0.7)
+  const [accept2, setAccept2State] = useState(0.45)
   const csvText = useRef<string | null>(null)
   const csvName = useRef("german_credit_25k")
   const modelRef = useRef(model)
@@ -127,16 +127,22 @@ export function useScorecard() {
     }
   }, [model, settings, dataset.id, active])
 
-  const sortedScores = useMemo(() => {
-    const copy = Array.from(model.scores)
-    copy.sort((a, b) => a - b)
-    return copy
-  }, [model])
-
-  const t1 = threshold1 ?? quantile(sortedScores, 0.7)
-  const t2 = threshold2 ?? quantile(sortedScores, 0.45)
-  const stats1 = useMemo(() => thresholdStats(model.scores, dataset.y, t1), [model, dataset, t1])
-  const stats2 = useMemo(() => thresholdStats(model.scores, dataset.y, t2), [model, dataset, t2])
+  const ranked = useMemo(() => rankByScore(model.scores), [model])
+  const counts = useMemo(() => bookCounts(dataset.y), [dataset])
+  const stats1 = useMemo(
+    () => economicsAtRate(model.scores, dataset.y, accept1, profitGood, lossBad, ranked, counts),
+    [model, dataset, accept1, profitGood, lossBad, ranked, counts],
+  )
+  const stats2 = useMemo(
+    () => economicsAtRate(model.scores, dataset.y, accept2, profitGood, lossBad, ranked, counts),
+    [model, dataset, accept2, profitGood, lossBad, ranked, counts],
+  )
+  const curve = useMemo(
+    () => profitCurve(model.scores, dataset.y, profitGood, lossBad, ranked, counts),
+    [model, dataset, profitGood, lossBad, ranked, counts],
+  )
+  const t1 = stats1.threshold
+  const t2 = stats2.threshold
   const activeVariable = model.variables.find((variable) => variable.name === active) ?? model.variables[0]
 
   function commitSettings(next: Settings, rebuild: boolean) {
@@ -182,8 +188,6 @@ export function useScorecard() {
       const name = built.variables[0]?.name ?? ""
       activeRef.current = name
       setActive(name)
-      setThreshold1(null)
-      setThreshold2(null)
       setSection("studio")
       setStatus(`Loaded ${result.dataset.name}.`)
     }).catch(() => {
@@ -207,8 +211,23 @@ export function useScorecard() {
     const name = built.variables[0]?.name ?? ""
     activeRef.current = name
     setActive(name)
-    setThreshold1(null)
-    setThreshold2(null)
+  }
+
+  function restoreDemo() {
+    csvText.current = null
+    csvName.current = "german_credit_25k"
+    const next = buildDemoDataset()
+    setError(null)
+    setCandidates([next.target])
+    datasetRef.current = next
+    setDataset(next)
+    const built = buildScorecard(next, settingsRef.current)
+    note(built)
+    const name = built.variables[0]?.name ?? ""
+    activeRef.current = name
+    setActive(name)
+    setSection("studio")
+    setStatus("Restored german_credit_25k.")
   }
 
   return {
@@ -224,10 +243,13 @@ export function useScorecard() {
     candidates,
     profitGood,
     lossBad,
+    accept1,
+    accept2,
     t1,
     t2,
     stats1,
     stats2,
+    curve,
     setSection,
     setActive: (name: string) => {
       activeRef.current = name
@@ -236,16 +258,23 @@ export function useScorecard() {
     },
     setProfitGood,
     setLossBad,
-    setThreshold1,
-    setThreshold2,
+    setAccept1(value: number) {
+      if (!Number.isFinite(value)) return
+      setAccept1State(Math.min(1, Math.max(0, value)))
+    },
+    setAccept2(value: number) {
+      if (!Number.isFinite(value)) return
+      setAccept2State(Math.min(1, Math.max(0, value)))
+    },
+    onFile,
+    onTarget,
+    restoreDemo,
     updateSetting,
     applyPreset(which: "defaults" | "strict") {
       const next = which === "strict" ? { ...STRICT_SETTINGS } : { ...DEFAULT_SETTINGS }
       commitSettings(next, true)
       setStatus(which === "strict" ? "Stricter minimum-bin preset." : "Spec defaults restored.")
     },
-    onFile,
-    onTarget,
     drag(index: number, value: number) {
       const next = dragCut(modelRef.current, datasetRef.current, settingsRef.current, activeRef.current, index, value)
       note(next)

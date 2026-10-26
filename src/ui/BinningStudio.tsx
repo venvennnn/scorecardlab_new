@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { fmt, fmtInt, fmtPct, intervalOf } from "../format"
+import { fmt, fmtDelta, fmtInt, fmtPct, intervalOf } from "../format"
 import type { VariableModel } from "../engine/scorecard"
 import { useLab } from "../state/lab"
 import { KsFigure, Silhouette } from "./figures"
@@ -220,6 +220,29 @@ export function BinningStudio() {
             </div>
             <div className="mt-1 h-16">
               <Silhouette bins={lab.model.histogram.bins} cutoff={lab.t1} />
+            </div>
+            <div className="mt-2 border-t border-outline-variant pt-2" data-testid="studio-economics">
+              <div className="font-label-caps text-[10px] tracking-[0.1em] text-secondary">
+                At {fmtPct(lab.accept1)} accept
+              </div>
+              <div className="mt-1 flex items-end justify-between gap-2">
+                <div>
+                  <div className="font-label-caps text-[10px] tracking-[0.08em] text-secondary">Profit</div>
+                  <div data-testid="studio-profit" className="font-numeric-data text-[1.05rem] leading-none">
+                    {fmtInt(lab.stats1.profit)}
+                  </div>
+                </div>
+                <div>
+                  <div className="font-label-caps text-[10px] tracking-[0.08em] text-secondary">Δ vs random</div>
+                  <div
+                    data-testid="studio-profit-delta"
+                    className={`font-numeric-data text-[1.05rem] leading-none ${lab.stats1.delta >= 0 ? "text-primary" : "text-tertiary"}`}
+                  >
+                    {fmtDelta(lab.stats1.delta)}
+                  </div>
+                </div>
+              </div>
+              <p className="mt-1 font-body-sm text-[11px] text-secondary">Same acceptance rate. Weaker AUC lowers both figures.</p>
             </div>
           </section>
           <section className="border border-outline-variant bg-surface-container-lowest px-3 py-2">

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { autoRanges, projectRanges, segmentOf } from "./binning"
 import { buildDemoDataset } from "./demo"
-import { allocatePoints, factorOf, offsetOf, woeAndIv } from "./stats"
+import { allocatePoints, economicsAtRate, factorOf, offsetOf, profitCurve, woeAndIv } from "./stats"
 import { buildScorecard, dragCut } from "./scorecard"
 import type { FineCell } from "./types"
 import { DEFAULT_SETTINGS } from "./types"
@@ -110,6 +110,53 @@ describe("points scaling", () => {
     const safe = allocatePoints(1.2, 6, scaling)
     const risky = allocatePoints(-0.4, 6, scaling)
     expect(risky.points).toBeGreaterThan(safe.points)
+  })
+})
+
+describe("acceptance economics", () => {
+  it("accepts the requested share of the safest accounts", () => {
+    const scores = new Float64Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    const y = new Uint8Array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+    const got = economicsAtRate(scores, y, 0.4, 100, 500)
+    expect(got.accepted).toBe(4)
+    expect(got.approval).toBeCloseTo(0.4)
+    expect(got.events).toBe(0)
+    expect(got.nonEvents).toBe(4)
+    expect(got.profit).toBe(400)
+    expect(got.randomProfit).toBeCloseTo(0.4 * (5 * 100 - 5 * 500))
+    expect(got.delta).toBeGreaterThan(0)
+  })
+
+  it("profit at a fixed acceptance rate falls when ranking (AUC) gets worse", () => {
+    const n = 200
+    const y = new Uint8Array(n)
+    const ranked = new Float64Array(n)
+    const scrambled = new Float64Array(n)
+    for (let i = 0; i < n; i++) {
+      y[i] = i >= 100 ? 1 : 0
+      ranked[i] = i
+      scrambled[i] = i < 100 ? i + 100 : i - 100
+    }
+    const good = economicsAtRate(ranked, y, 0.5, 100, 500)
+    const bad = economicsAtRate(scrambled, y, 0.5, 100, 500)
+    expect(good.approval).toBeCloseTo(0.5)
+    expect(bad.approval).toBeCloseTo(0.5)
+    expect(good.eventRate).toBeLessThan(bad.eventRate)
+    expect(good.profit).toBeGreaterThan(bad.profit)
+    expect(good.delta).toBeGreaterThan(bad.delta)
+  })
+
+  it("beats a random book on the demo scorecard at the same acceptance rate", () => {
+    const dataset = buildDemoDataset()
+    const model = buildScorecard(dataset, DEFAULT_SETTINGS)
+    const got = economicsAtRate(model.scores, dataset.y, 0.7, 100, 500)
+    expect(got.approval).toBeCloseTo(0.7, 3)
+    expect(got.profit).toBeGreaterThan(got.randomProfit)
+    const curve = profitCurve(model.scores, dataset.y, 100, 500)
+    expect(curve).toHaveLength(21)
+    const mid = curve[14]
+    expect(mid.rate).toBeCloseTo(0.7)
+    expect(mid.profit).toBeGreaterThan(mid.randomProfit)
   })
 })
 

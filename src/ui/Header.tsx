@@ -38,11 +38,18 @@ export function Header() {
         <span className="shrink-0 font-label-caps text-[12px] tracking-[0.18em] text-on-surface">SCORECARDLAB</span>
         <span className="h-4 w-px shrink-0 bg-outline-variant" />
         <div className="flex min-w-0 items-center gap-1.5 font-numeric-data text-[11px] text-secondary">
-          <button type="button" data-testid="dataset-button" className="truncate" onClick={() => fileRef.current?.click()} title="Upload a UTF-8 CSV">
+          <button
+            type="button"
+            data-testid="dataset-button"
+            className="inline-flex shrink-0 items-center gap-1 border border-outline-variant px-1.5 py-0.5 hover:bg-surface-container"
+            onClick={() => fileRef.current?.click()}
+            title="Upload a UTF-8 CSV"
+          >
+            <span className="material-symbols-outlined text-[14px] text-primary">upload</span>
             DATA <span className="text-on-surface">{lab.dataset.name}</span>
           </button>
           <span aria-hidden>·</span>
-          <span className="truncate">
+          <span className="shrink-0">
             TARGET{" "}
             {lab.candidates.length > 1 ? (
               <select
@@ -97,6 +104,26 @@ export function Header() {
           })}
         </nav>
         <div className="flex shrink-0 items-center gap-3" ref={menuRef}>
+          <button
+            type="button"
+            data-testid="upload-csv"
+            className="inline-flex items-center gap-1 font-body-sm text-[13px] text-secondary hover:text-on-surface"
+            title="Upload a UTF-8 CSV. Numeric columns are binned; pick a binary target."
+            onClick={() => fileRef.current?.click()}
+          >
+            <span className="material-symbols-outlined text-[16px]">upload</span>
+            Upload CSV
+          </button>
+          {lab.dataset.id !== "german_credit_25k" && (
+            <button
+              type="button"
+              data-testid="restore-demo"
+              className="font-body-sm text-[13px] text-secondary hover:text-on-surface"
+              onClick={lab.restoreDemo}
+            >
+              Restore demo
+            </button>
+          )}
           <div className="relative">
             <button
               type="button"
