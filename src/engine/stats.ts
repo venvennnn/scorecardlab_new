@@ -221,6 +221,115 @@ export function thresholdStats(
   }
 }
 
+export type BookCounts = { n: number; events: number; nonEvents: number }
+
+export function bookCounts(y: ArrayLike<number>): BookCounts {
+  let events = 0
+  const n = y.length
+  for (let i = 0; i < n; i++) if (y[i] === 1) events++
+  return { n, events, nonEvents: n - events }
+}
+
+/** Indices of accounts from safest (lowest score) to riskiest. */
+export function rankByScore(scores: ArrayLike<number>): number[] {
+  const n = scores.length
+  const order = new Array<number>(n)
+  for (let i = 0; i < n; i++) order[i] = i
+  order.sort((a, b) => scores[a] - scores[b] || a - b)
+  return order
+}
+
+export type BookEconomics = {
+  approval: number
+  eventRate: number
+  accepted: number
+  events: number
+  nonEvents: number
+  threshold: number
+  profit: number
+  randomProfit: number
+  delta: number
+}
+
+/**
+ * Accept the safest `rate` share of the book (lowest scores first).
+ * Random-book profit is the same share drawn without ranking.
+ * If AUC falls, more bads land in that safest share, so profit and Δ fall.
+ */
+export function economicsAtRate(
+  scores: ArrayLike<number>,
+  y: ArrayLike<number>,
+  rate: number,
+  profitGood: number,
+  lossBad: number,
+  order?: number[],
+  counts?: BookCounts,
+): BookEconomics {
+  const ranked = order ?? rankByScore(scores)
+  const book = counts ?? bookCounts(y)
+  const { n, events: bookEvents, nonEvents: bookNon } = book
+  const clamped = Number.isFinite(rate) ? Math.min(1, Math.max(0, rate)) : 0
+  const k = n === 0 ? 0 : Math.round(clamped * n)
+  let events = 0
+  let nonEvents = 0
+  for (let i = 0; i < k; i++) {
+    if (y[ranked[i]] === 1) events++
+    else nonEvents++
+  }
+  const threshold = n === 0 ? 0 : scores[ranked[Math.max(0, k - 1)]]
+  const approval = n ? k / n : 0
+  const profit = nonEvents * profitGood - events * lossBad
+  const randomProfit = approval * (bookNon * profitGood - bookEvents * lossBad)
+  return {
+    approval,
+    eventRate: k ? events / k : 0,
+    accepted: k,
+    events,
+    nonEvents,
+    threshold,
+    profit,
+    randomProfit,
+    delta: profit - randomProfit,
+  }
+}
+
+export type CurvePoint = { rate: number; profit: number; randomProfit: number }
+
+export function profitCurve(
+  scores: ArrayLike<number>,
+  y: ArrayLike<number>,
+  profitGood: number,
+  lossBad: number,
+  order?: number[],
+  counts?: BookCounts,
+  steps = 20,
+): CurvePoint[] {
+  const ranked = order ?? rankByScore(scores)
+  const book = counts ?? bookCounts(y)
+  const { n, events: bookEvents, nonEvents: bookNon } = book
+  const acceptAll = bookNon * profitGood - bookEvents * lossBad
+  const prefix = new Array<number>(n + 1)
+  prefix[0] = 0
+  let profit = 0
+  for (let i = 0; i < n; i++) {
+    if (y[ranked[i]] === 1) profit -= lossBad
+    else profit += profitGood
+    prefix[i + 1] = profit
+  }
+  const out: CurvePoint[] = []
+  const count = Math.max(1, Math.round(steps))
+  for (let s = 0; s <= count; s++) {
+    const rate = s / count
+    const k = Math.round(rate * n)
+    out.push({
+      rate,
+      profit: prefix[k] ?? 0,
+      randomProfit: (n ? k / n : 0) * acceptAll,
+    })
+  }
+  return out
+}
+
 export function skewness(values: ArrayLike<number>): number {
   let n = 0
   let sum = 0

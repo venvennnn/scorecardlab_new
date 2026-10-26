@@ -96,9 +96,13 @@ note(pdoAfter !== pdoBefore, "PDO change rescales the points table")
 
 await page.click("[data-testid='nav-frontier']")
 await page.waitForSelector("[data-testid='frontier']")
+const uploadLabel = await page.$eval("[data-testid='upload-csv']", (el) => el.textContent.trim())
+note(uploadLabel.includes("Upload CSV"), `upload control ${uploadLabel}`)
 const approvalBefore = await page.$eval("[data-testid='approval-a']", (el) => el.textContent.trim())
 const profitBefore = await page.$eval("[data-testid='profit-a']", (el) => el.textContent.trim())
-const slider = await page.$("[data-testid='threshold-a']")
+const deltaBefore = await page.$eval("[data-testid='profit-delta-a']", (el) => el.textContent.trim())
+note(deltaBefore.length > 0, `profit delta shown ${deltaBefore}`)
+const slider = await page.$("[data-testid='acceptance-a']")
 const sliderBox = await slider.boundingBox()
 if (sliderBox) {
   await page.mouse.click(sliderBox.x + sliderBox.width * 0.42, sliderBox.y + sliderBox.height / 2)
@@ -106,8 +110,10 @@ if (sliderBox) {
 await new Promise((r) => setTimeout(r, 150))
 const approvalAfter = await page.$eval("[data-testid='approval-a']", (el) => el.textContent.trim())
 const profitAfter = await page.$eval("[data-testid='profit-a']", (el) => el.textContent.trim())
-note(approvalAfter !== approvalBefore || profitAfter !== profitBefore, `threshold ${approvalBefore}/${profitBefore} -> ${approvalAfter}/${profitAfter}`)
+const shift = await page.$eval("[data-testid='profit-shift-value']", (el) => el.textContent.trim())
+note(approvalAfter !== approvalBefore || profitAfter !== profitBefore, `acceptance ${approvalBefore}/${profitBefore} -> ${approvalAfter}/${profitAfter}`)
 note(approvalAfter !== "0.0%" && approvalAfter !== "100.0%", `approval stays inside the book (${approvalAfter})`)
+note(/[+\-−]/.test(shift) || shift === "0", `A to B profit change ${shift}`)
 await page.screenshot({ path: `${media}/economic-view.png` })
 
 writeFileSync("/tmp/scorecard-bad.csv", "")
@@ -136,6 +142,13 @@ const uploadedIv = await page.$eval("[data-testid='metric-iv']", (el) => el.text
 note(/\d/.test(uploadedIv), `uploaded iv ${uploadedIv.replace(/\s+/g, " ")}`)
 const warn = await page.$eval("[data-testid='warning-line']", (el) => el.textContent)
 note(/city/i.test(warn), `categorical warning present`)
+const restore = await page.$("[data-testid='restore-demo']")
+note(Boolean(restore), "restore demo is offered after upload")
+if (restore) {
+  await restore.click()
+  await page.waitForFunction(() => document.querySelector("[data-testid='dataset-button']")?.textContent?.includes("german_credit_25k"))
+  note(true, "restore demo reloads german_credit_25k")
+}
 
 const client = await page.createCDPSession()
 await client.send("Page.setDownloadBehavior", { behavior: "allow", downloadPath: "/tmp" })

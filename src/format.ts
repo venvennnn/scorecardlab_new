@@ -21,6 +21,14 @@ export function fmtPct(n: number, digits = 1): string {
   })}%`
 }
 
+export function fmtDelta(n: number): string {
+  if (!Number.isFinite(n)) return "—"
+  const body = fmtInt(Math.abs(n))
+  if (n > 0) return `+${body}`
+  if (n < 0) return `−${body}`
+  return body
+}
+
 export function fmtCut(n: number): string {
   if (!Number.isFinite(n)) return "—"
   const abs = Math.abs(n)

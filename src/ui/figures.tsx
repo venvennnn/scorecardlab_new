@@ -1,4 +1,4 @@
-import type { HistBin } from "../engine/stats"
+import type { CurvePoint, HistBin } from "../engine/stats"
 import type { KsPoint } from "../engine/scorecard"
 
 export function KsFigure({
@@ -72,5 +72,60 @@ export function Silhouette({
       <path d={area("events")} fill="#a83300" opacity="0.45" />
       {cutX != null && <line x1={cutX} x2={cutX} y1={m.t} y2={m.t + ih} stroke="#0037b0" strokeDasharray="3 2" />}
     </svg>
+  )
+}
+
+export function ProfitCurve({
+  points,
+  a,
+  b,
+}: {
+  points: CurvePoint[]
+  a: { rate: number; profit: number }
+  b: { rate: number; profit: number }
+}) {
+  const w = 640
+  const h = 180
+  const m = { l: 44, r: 12, t: 10, b: 22 }
+  const iw = w - m.l - m.r
+  const ih = h - m.t - m.b
+  const values = points.flatMap((point) => [point.profit, point.randomProfit])
+  let min = Math.min(...values, a.profit, b.profit, 0)
+  let max = Math.max(...values, a.profit, b.profit, 0)
+  if (max - min < 1) {
+    min -= 1
+    max += 1
+  }
+  const x = (rate: number) => m.l + rate * iw
+  const y = (value: number) => m.t + (1 - (value - min) / (max - min)) * ih
+  const path = (key: "profit" | "randomProfit") =>
+    points.map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.rate)} ${y(point[key])}`).join(" ")
+  const zero = min < 0 && max > 0 ? y(0) : null
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="h-full w-full" data-testid="profit-curve">
+      <line x1={m.l} x2={w - m.r} y1={y(min)} y2={y(min)} stroke="#c4c5d7" />
+      {zero != null && <line x1={m.l} x2={w - m.r} y1={zero} y2={zero} stroke="#c4c5d7" strokeDasharray="2 3" />}
+      <path d={path("randomProfit")} fill="none" stroke="#747686" strokeWidth="1.2" strokeDasharray="4 3" />
+      <path d={path("profit")} fill="none" stroke="#0037b0" strokeWidth="1.8" />
+      <Marker x={x(a.rate)} y={y(a.profit)} label="A" />
+      <Marker x={x(b.rate)} y={y(b.profit)} label="B" />
+      <text x={m.l} y={h - 6} fill="#515f74" fontSize="10" fontFamily="JetBrains Mono, ui-monospace, monospace">
+        0%
+      </text>
+      <text x={w - m.r} y={h - 6} textAnchor="end" fill="#515f74" fontSize="10" fontFamily="JetBrains Mono, ui-monospace, monospace">
+        100% accept
+      </text>
+    </svg>
+  )
+}
+
+function Marker({ x, y, label }: { x: number; y: number; label: string }) {
+  return (
+    <g>
+      <circle cx={x} cy={y} r="3.5" fill="#0037b0" />
+      <text x={x + 6} y={y - 6} fill="#0037b0" fontSize="10" fontFamily="Hanken Grotesk, sans-serif">
+        {label}
+      </text>
+    </g>
   )
 }
