@@ -113,6 +113,35 @@ describe("points scaling", () => {
   })
 })
 
+describe("row score identity", () => {
+  it("equals the sum of the matched bin points, which is offset − factor × Σ WoE", () => {
+    const dataset = buildDemoDataset()
+    const model = buildScorecard(dataset, DEFAULT_SETTINGS)
+    const offset = offsetOf(DEFAULT_SETTINGS)
+    const factor = factorOf(DEFAULT_SETTINGS.pdo)
+    const row = 17
+    let points = 0
+    let woe = 0
+    for (const variable of model.variables) {
+      const value = variable.values[row]
+      let bin = variable.bins[variable.bins.length - 1]
+      if (Number.isNaN(value)) {
+        bin = variable.missingBin
+          ? { ...variable.bins[0], ...variable.missingBin }
+          : variable.bins[variable.foldedInto ?? variable.bins.length - 1]
+      } else {
+        let index = 0
+        while (index < variable.bins.length - 1 && value > variable.bins[index].hi) index += 1
+        bin = variable.bins[index]
+      }
+      points += bin.points
+      woe += bin.woe
+    }
+    expect(model.scores[row]).toBeCloseTo(points, 8)
+    expect(points).toBeCloseTo(offset - factor * woe, 6)
+  })
+})
+
 describe("acceptance economics", () => {
   it("accepts the requested share of the safest accounts", () => {
     const scores = new Float64Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])

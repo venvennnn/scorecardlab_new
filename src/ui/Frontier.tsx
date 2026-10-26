@@ -22,8 +22,7 @@ export function Frontier() {
         </p>
         <div className="relative mt-4 h-64 border border-outline-variant bg-surface-container-lowest">
           <Silhouette bins={lab.model.histogram.bins} tall />
-          <Marker value={lab.t1} min={min} span={span} label="A" />
-          <Marker value={lab.t2} min={min} span={span} label="B" />
+          <ThresholdMarkers a={lab.t1} b={lab.t2} min={min} span={span} />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <PolicyCard
@@ -76,11 +75,29 @@ export function Frontier() {
   )
 }
 
-function Marker({ value, min, span, label }: { value: number; min: number; span: number; label: string }) {
-  const left = `${Math.min(98, Math.max(1, ((value - min) / span) * 100))}%`
+function ThresholdMarkers({ a, b, min, span }: { a: number; b: number; min: number; span: number }) {
+  const pos = (value: number) => Math.min(98, Math.max(1, ((value - min) / span) * 100))
+  const leftA = pos(a)
+  const leftB = pos(b)
+  const close = Math.abs(leftA - leftB) < 8
   return (
-    <div className="pointer-events-none absolute bottom-0 top-0 border-l border-dashed border-primary" style={{ left }}>
-      <span className="absolute left-1 top-1 font-label-caps text-[10px] tracking-[0.12em] text-primary">{label}</span>
+    <>
+      <Marker left={leftA} label="A" offsetTop={false} flip={close && leftA > leftB} />
+      <Marker left={leftB} label="B" offsetTop={close} flip={close && leftB > leftA} />
+    </>
+  )
+}
+
+function Marker({ left, label, offsetTop, flip }: { left: number; label: string; offsetTop: boolean; flip: boolean }) {
+  return (
+    <div className="pointer-events-none absolute bottom-0 top-0 border-l border-dashed border-primary" style={{ left: `${left}%` }}>
+      <span
+        className={`absolute font-label-caps text-[10px] tracking-[0.12em] text-primary ${
+          offsetTop ? "top-5" : "top-1"
+        } ${flip ? "right-1" : "left-1"}`}
+      >
+        {label}
+      </span>
     </div>
   )
 }
