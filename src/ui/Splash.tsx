@@ -4,7 +4,7 @@ export function Splash({ onDone }: { onDone: () => void }) {
   const doneRef = useRef(onDone)
   doneRef.current = onDone
   useEffect(() => {
-    const timer = window.setTimeout(() => doneRef.current(), 1400)
+    const timer = window.setTimeout(() => doneRef.current(), 2200)
     return () => window.clearTimeout(timer)
   }, [])
 

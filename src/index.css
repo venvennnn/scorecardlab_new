@@ -31,7 +31,7 @@ input[type="range"] {
 }
 
 .splash-title {
-  animation: splash-fade 1.4s ease forwards;
+  animation: splash-fade 2.2s ease forwards;
 }
 
 @keyframes splash-fade {
@@ -39,11 +39,11 @@ input[type="range"] {
     opacity: 0;
     transform: translateY(8px);
   }
-  18% {
+  12% {
     opacity: 1;
     transform: translateY(0);
   }
-  62% {
+  72% {
     opacity: 1;
   }
   100% {
