@@ -5,6 +5,7 @@ import { KsFigure, Silhouette } from "./figures"
 
 export function Diagnostics() {
   const lab = useLab()
+  if (!lab.dataset || !lab.model) return null
   return (
     <PageWrap>
       <SectionKicker index="02" label="MODEL DIAGNOSTICS" meta={`${fmtInt(lab.dataset.rowCount)} observations`} />
@@ -38,6 +39,7 @@ export function Diagnostics() {
               <tr className="font-label-caps text-[10px] tracking-[0.08em] text-secondary">
                 <th className="border-b border-outline-variant py-1 font-semibold">Variable</th>
                 <th className="border-b border-outline-variant py-1 font-semibold">IV</th>
+                <th className="border-b border-outline-variant py-1 font-semibold">β</th>
                 <th className="border-b border-outline-variant py-1 font-semibold">Gini</th>
               </tr>
             </thead>
@@ -46,6 +48,7 @@ export function Diagnostics() {
                 <tr key={variable.name} className="border-b border-outline-variant/70">
                   <td className="py-1 pr-2 font-body-sm text-[12px]">{variable.name}</td>
                   <td className="text-primary">{fmt(variable.iv, 3)}</td>
+                  <td>{fmt(variable.beta, 2)}</td>
                   <td>{fmt(variable.gini, 3)}</td>
                 </tr>
               ))}

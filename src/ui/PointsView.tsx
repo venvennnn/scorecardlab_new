@@ -6,6 +6,7 @@ import { PageWrap, SectionKicker } from "./chrome"
 
 export function PointsView() {
   const lab = useLab()
+  if (!lab.dataset || !lab.model) return null
   const offset = offsetOf(lab.settings)
   const factor = factorOf(lab.settings.pdo)
   const n = Math.max(1, lab.model.variables.length)
@@ -16,7 +17,7 @@ export function PointsView() {
       <SectionKicker index="03" label="SCORECARD POINTS" meta={`PDO ${fmtInt(lab.settings.pdo)} · base ${fmtInt(lab.settings.baseScore)} · odds ${fmtInt(lab.settings.odds)}:1`} />
       <h1 className="mt-1 font-display text-[2.25rem] font-normal italic leading-none tracking-tight">Points table</h1>
       <p className="mt-2 max-w-3xl font-body-sm text-[13px] text-secondary">
-        Each account takes one bin from each variable. Those points sum to offset − factor × Σ WoE, where factor is PDO / ln 2 and offset is the base score minus factor × ln(odds). Higher points are riskier. Bins of one variable are alternatives, so they are not added down the ledger.
+        Each account takes one bin from each variable. Those points sum to offset + factor × Σ (β × WoE), where factor is PDO / ln 2, offset is the base score minus factor × ln(odds), and β is the logistic coefficient on that variable's WoE. Higher points are riskier. Bins of one variable are alternatives, so they are not added down the ledger.
       </p>
       <dl className="mt-4 grid grid-cols-4 gap-3 border border-outline-variant bg-surface-container-lowest px-3 py-3" data-testid="points-identity">
         <div>

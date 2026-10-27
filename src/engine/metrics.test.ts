@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { autoRanges, projectRanges, segmentOf } from "./binning"
 import { buildDemoDataset } from "./demo"
+import { fitLogistic } from "./logistic"
 import { allocatePoints, economicsAtRate, factorOf, offsetOf, profitCurve, woeAndIv } from "./stats"
 import { buildScorecard, dragCut } from "./scorecard"
 import type { FineCell } from "./types"
@@ -104,6 +105,8 @@ describe("points scaling", () => {
     const loaded = allocatePoints(1, 4, scaling)
     expect(loaded.contribution).toBeCloseTo(-factor, 8)
     expect(loaded.points).toBeCloseTo(offset / 4 - factor, 8)
+    const shrunk = allocatePoints(1, 4, scaling, -0.5)
+    expect(shrunk.contribution).toBeCloseTo(-0.5 * factor, 8)
   })
 
   it("gives a riskier bin more points when WoE falls", () => {
@@ -114,14 +117,14 @@ describe("points scaling", () => {
 })
 
 describe("row score identity", () => {
-  it("equals the sum of the matched bin points, which is offset − factor × Σ WoE", () => {
+  it("equals the sum of the matched bin points, which is offset + factor × Σ (β × WoE)", () => {
     const dataset = buildDemoDataset()
     const model = buildScorecard(dataset, DEFAULT_SETTINGS)
     const offset = offsetOf(DEFAULT_SETTINGS)
     const factor = factorOf(DEFAULT_SETTINGS.pdo)
     const row = 17
     let points = 0
-    let woe = 0
+    let weighted = 0
     for (const variable of model.variables) {
       const value = variable.values[row]
       let bin = variable.bins[variable.bins.length - 1]
@@ -135,10 +138,12 @@ describe("row score identity", () => {
         bin = variable.bins[index]
       }
       points += bin.points
-      woe += bin.woe
+      weighted += variable.beta * bin.woe
     }
     expect(model.scores[row]).toBeCloseTo(points, 8)
-    expect(points).toBeCloseTo(offset - factor * woe, 6)
+    expect(points).toBeCloseTo(offset + factor * weighted, 5)
+    expect(Number.isFinite(model.intercept)).toBe(true)
+    expect(model.variables.every((variable) => Number.isFinite(variable.beta))).toBe(true)
   })
 })
 
@@ -186,6 +191,35 @@ describe("acceptance economics", () => {
     const mid = curve[14]
     expect(mid.rate).toBeCloseTo(0.7)
     expect(mid.profit).toBeGreaterThan(mid.randomProfit)
+  })
+})
+
+describe("logistic on selected WoE bins", () => {
+  it("fits a negative coefficient when high WoE marks the non-event class", () => {
+    const n = 400
+    const X = new Float64Array(n)
+    const y = new Uint8Array(n)
+    for (let i = 0; i < n; i++) {
+      X[i] = i < 200 ? 1.2 : -1.1
+      y[i] = i < 200 ? 0 : 1
+    }
+    const fit = fitLogistic(X, n, 1, y)
+    expect(Number.isFinite(fit.intercept)).toBe(true)
+    expect(fit.coef[0]).toBeLessThan(-0.2)
+  })
+
+  it("fits finite coefficients and keeps the requested feature subset", () => {
+    const dataset = buildDemoDataset()
+    const names = dataset.features.map((feature) => feature.name)
+    const full = buildScorecard(dataset, DEFAULT_SETTINGS, undefined, names)
+    expect(full.variables.map((variable) => variable.name)).toEqual(names)
+    expect(full.auc).toBeGreaterThan(0.6)
+    const dropped = names.filter((name) => name !== "total_credit_lines")
+    const subset = buildScorecard(dataset, DEFAULT_SETTINGS, undefined, dropped)
+    expect(subset.variables.map((variable) => variable.name)).toEqual(dropped)
+    expect(subset.variables).toHaveLength(5)
+    expect(Number.isFinite(subset.intercept)).toBe(true)
+    expect(subset.variables.every((variable) => Number.isFinite(variable.beta))).toBe(true)
   })
 })
 

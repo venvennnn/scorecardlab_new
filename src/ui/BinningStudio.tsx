@@ -8,10 +8,12 @@ import { WoeChart } from "./WoeChart"
 
 export function BinningStudio() {
   const lab = useLab()
+  const dataset = lab.dataset
+  const model = lab.model
   const variable = lab.activeVariable
-  if (!variable) return null
+  if (!variable || !dataset || !model) return null
 
-  const minCount = Math.max(1, Math.ceil(lab.settings.minBinPct * lab.dataset.rowCount))
+  const minCount = Math.max(1, Math.ceil(lab.settings.minBinPct * dataset.rowCount))
   const totalN = variable.bins.reduce((sum, bin) => sum + bin.count, 0) + (variable.missingBin?.count ?? 0)
   const totalEvents = variable.bins.reduce((sum, bin) => sum + bin.events, 0) + (variable.missingBin?.events ?? 0)
   const totalIv = variable.bins.reduce((sum, bin) => sum + bin.iv, 0) + (variable.missingBin?.iv ?? 0)
@@ -21,15 +23,15 @@ export function BinningStudio() {
   const violations = countViolations(variable)
   const degenerate =
     variable.bins.filter((bin) => bin.count < minCount).length + (variable.missingBin && variable.missingBin.count < minCount ? 1 : 0)
-  const aggregateIv = lab.model.variables.reduce((sum, item) => sum + item.iv, 0)
-  const maxIv = Math.max(...lab.model.variables.map((item) => item.iv), 0.0001)
-  const ms = lab.model.ms < 1 ? "<1 ms" : `${Math.round(lab.model.ms)} ms`
+  const aggregateIv = model.variables.reduce((sum, item) => sum + item.iv, 0)
+  const maxIv = Math.max(...model.variables.map((item) => item.iv), 0.0001)
+  const ms = model.ms < 1 ? "<1 ms" : `${Math.round(model.ms)} ms`
 
   return (
     <PageWrap>
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <SectionKicker index="01" label="FEATURE PARTITION STUDIO" meta={`${fmtInt(lab.dataset.rowCount)} observations`} />
+          <SectionKicker index="01" label="FEATURE PARTITION STUDIO" meta={`${fmtInt(dataset.rowCount)} observations`} />
           <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <h1 data-testid="active-name" className="font-display text-[2.25rem] font-normal italic leading-none tracking-tight text-on-surface">
               {variable.name}
@@ -67,29 +69,48 @@ export function BinningStudio() {
         <div className="col-span-3 flex flex-col gap-3">
           <section className="border border-outline-variant bg-surface-container-lowest">
             <h2 className="border-b border-outline-variant px-3 py-2 font-label-caps text-[10px] tracking-[0.14em]">Predictive index (IV rank)</h2>
+            <p className="border-b border-outline-variant px-3 py-1.5 font-body-sm text-[11px] text-secondary">
+              Uncheck to drop a feature and refit logistic on the remaining WoE bins. AUC updates live.
+            </p>
             <ol>
-              {lab.model.variables.map((item, index) => {
-                const on = item.name === variable.name
+              {featureRows(dataset.features, model.variables).map((row, index) => {
+                const on = row.item?.name === variable.name
                 return (
-                  <li key={item.name}>
-                    <button
-                      type="button"
-                      data-testid={`var-${item.name}`}
-                      onClick={() => lab.setActive(item.name)}
-                      className={`flex w-full items-center gap-2 border-l-2 px-3 py-1.5 text-left ${
+                  <li key={row.name}>
+                    <div
+                      className={`flex w-full items-center gap-2 border-l-2 px-3 py-1.5 ${
                         on ? "border-primary bg-surface-container-low" : "border-transparent hover:bg-surface-container-low"
                       }`}
                     >
-                      <span className="w-5 font-numeric-data text-[11px] text-secondary">{String(index + 1).padStart(2, "0")}</span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-body-sm text-[12px]">{item.name}</span>
-                        <span className="mt-0.5 block h-1 bg-surface-container-high">
-                          <span className="block h-1 bg-primary" style={{ width: `${Math.max(4, (item.iv / maxIv) * 100)}%` }} />
+                      <input
+                        type="checkbox"
+                        data-testid={`feature-toggle-${row.name}`}
+                        checked={Boolean(row.item)}
+                        onChange={() => lab.toggleFeature(row.name)}
+                        className="shrink-0"
+                      />
+                      <button
+                        type="button"
+                        data-testid={`var-${row.name}`}
+                        disabled={!row.item}
+                        onClick={() => lab.setActive(row.name)}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default disabled:opacity-50"
+                      >
+                        <span className="w-5 font-numeric-data text-[11px] text-secondary">{String(index + 1).padStart(2, "0")}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-body-sm text-[12px]">{row.name}</span>
+                          {row.item ? (
+                            <span className="mt-0.5 block h-1 bg-surface-container-high">
+                              <span className="block h-1 bg-primary" style={{ width: `${Math.max(4, (row.item.iv / maxIv) * 100)}%` }} />
+                            </span>
+                          ) : (
+                            <span className="mt-0.5 block font-numeric-data text-[10px] text-secondary">off · not in the card</span>
+                          )}
                         </span>
-                      </span>
-                      {on && <Spark rates={item.bins.map((bin) => bin.eventRate)} />}
-                      <span className="font-numeric-data text-[11px]">{fmt(item.iv, 3)}</span>
-                    </button>
+                        {on && row.item && <Spark rates={row.item.bins.map((bin) => bin.eventRate)} />}
+                        <span className="font-numeric-data text-[11px]">{row.item ? fmt(row.item.iv, 3) : "off"}</span>
+                      </button>
+                    </div>
                   </li>
                 )
               })}
@@ -150,7 +171,7 @@ export function BinningStudio() {
                     <td className="px-2 py-1">{String(index + 1).padStart(2, "0")}</td>
                     <td className="px-2 py-1">{intervalOf(variable, index)}</td>
                     <td className="px-2 py-1">{fmtInt(bin.count)}</td>
-                    <td className="px-2 py-1">{fmtPct(bin.count / lab.dataset.rowCount)}</td>
+                    <td className="px-2 py-1">{fmtPct(bin.count / dataset.rowCount)}</td>
                     <td className="px-2 py-1 text-tertiary">{fmtPct(bin.eventRate)}</td>
                     <td className="px-2 py-1 font-bold text-primary">{fmt(bin.woe, 3)}</td>
                     <td className="px-2 py-1">{fmt(bin.iv, 3)}</td>
@@ -162,7 +183,7 @@ export function BinningStudio() {
                     <td className="px-2 py-1">—</td>
                     <td className="px-2 py-1">missing</td>
                     <td className="px-2 py-1">{fmtInt(variable.missingBin.count)}</td>
-                    <td className="px-2 py-1">{fmtPct(variable.missingBin.count / lab.dataset.rowCount)}</td>
+                    <td className="px-2 py-1">{fmtPct(variable.missingBin.count / dataset.rowCount)}</td>
                     <td className="px-2 py-1 text-tertiary">{fmtPct(variable.missingBin.eventRate)}</td>
                     <td className="px-2 py-1 font-bold text-primary">{fmt(variable.missingBin.woe, 3)}</td>
                     <td className="px-2 py-1">{fmt(variable.missingBin.iv, 3)}</td>
@@ -175,7 +196,7 @@ export function BinningStudio() {
                   <td className="px-2 py-1 font-label-caps text-[10px] tracking-[0.08em] text-secondary">Sum</td>
                   <td className="px-2 py-1" />
                   <td className="px-2 py-1">{fmtInt(totalN)}</td>
-                  <td className="px-2 py-1">{fmtPct(totalN / lab.dataset.rowCount)}</td>
+                  <td className="px-2 py-1">{fmtPct(totalN / dataset.rowCount)}</td>
                   <td className="px-2 py-1 text-tertiary">{fmtPct(totalN ? totalEvents / totalN : 0)}</td>
                   <td className="px-2 py-1" />
                   <td className="px-2 py-1">{fmt(totalIv, 3)}</td>
@@ -187,11 +208,11 @@ export function BinningStudio() {
             </table>
             <p
               className="truncate border-t border-outline-variant px-3 py-1.5 font-numeric-data text-[11px] text-secondary"
-              title={lab.dataset.issues.map((issue) => issue.message).join(" · ")}
+              title={dataset.issues.map((issue) => issue.message).join(" · ")}
             >
               {ms} · {violations} violation{violations === 1 ? "" : "s"} · {degenerate} degenerate · PDO {fmtInt(lab.settings.pdo)} / base {fmtInt(lab.settings.baseScore)} / odds {fmtInt(lab.settings.odds)}:1
-              {lab.dataset.issues.length > 0 && (
-                <span data-testid="warning-line"> · {lab.dataset.issues.map((issue) => issue.message).join(" · ")}</span>
+              {dataset.issues.length > 0 && (
+                <span data-testid="warning-line"> · {dataset.issues.map((issue) => issue.message).join(" · ")}</span>
               )}
             </p>
           </div>
@@ -203,15 +224,15 @@ export function BinningStudio() {
             <div className="mt-2 flex items-end justify-between gap-2">
               <div data-testid="model-auc">
                 <div className="font-label-caps text-[10px] tracking-[0.1em] text-secondary">AUC</div>
-                <div className="font-numeric-data text-[1.15rem] leading-none">{fmt(lab.model.auc, 3)}</div>
+                <div className="font-numeric-data text-[1.15rem] leading-none">{fmt(model.auc, 3)}</div>
               </div>
               <div data-testid="model-ks">
                 <div className="font-label-caps text-[10px] tracking-[0.1em] text-secondary">KS</div>
-                <div className="font-numeric-data text-[1.15rem] leading-none">{fmt(lab.model.ks, 3)}</div>
+                <div className="font-numeric-data text-[1.15rem] leading-none">{fmt(model.ks, 3)}</div>
               </div>
               <div data-testid="model-gini">
                 <div className="font-label-caps text-[10px] tracking-[0.1em] text-secondary">Gini</div>
-                <div className="font-numeric-data text-[1.15rem] leading-none">{fmt(lab.model.gini, 3)}</div>
+                <div className="font-numeric-data text-[1.15rem] leading-none">{fmt(model.gini, 3)}</div>
               </div>
             </div>
             <div className="mt-2">
@@ -219,10 +240,10 @@ export function BinningStudio() {
               <div className="font-display text-[2.5rem] font-normal italic leading-none tracking-tight">{fmt(aggregateIv, 3)}</div>
             </div>
             <div className="mt-2 h-24">
-              <KsFigure curve={lab.model.curve} ksAt={lab.model.ksAt} />
+              <KsFigure curve={model.curve} ksAt={model.ksAt} />
             </div>
             <div className="mt-1 h-16">
-              <Silhouette bins={lab.model.histogram.bins} cutoff={lab.t1} />
+              <Silhouette bins={model.histogram.bins} cutoff={lab.t1} />
             </div>
             <div className="mt-2 border-t border-outline-variant pt-2" data-testid="studio-economics">
               <div className="font-label-caps text-[10px] tracking-[0.1em] text-secondary">
@@ -236,6 +257,12 @@ export function BinningStudio() {
                   </div>
                 </div>
                 <div>
+                  <div className="font-label-caps text-[10px] tracking-[0.08em] text-secondary">Bad rate</div>
+                  <div data-testid="studio-bad-rate" className="font-numeric-data text-[1.05rem] leading-none text-tertiary">
+                    {fmtPct(lab.stats1.eventRate)}
+                  </div>
+                </div>
+                <div>
                   <div className="font-label-caps text-[10px] tracking-[0.08em] text-secondary">Δ vs random</div>
                   <div
                     data-testid="studio-profit-delta"
@@ -245,7 +272,7 @@ export function BinningStudio() {
                   </div>
                 </div>
               </div>
-              <p className="mt-1 font-body-sm text-[11px] text-secondary">Same acceptance rate. Weaker AUC lowers both figures.</p>
+              <p className="mt-1 font-body-sm text-[11px] text-secondary">Same acceptance rate. Weaker AUC raises the bad rate and cuts profit.</p>
             </div>
           </section>
           <section className="border border-outline-variant bg-surface-container-lowest px-3 py-2">
@@ -268,7 +295,7 @@ export function BinningStudio() {
       <section className="mt-3 border border-outline-variant bg-surface-container-lowest">
         <h2 className="border-b border-outline-variant px-3 py-2 font-label-caps text-[10px] tracking-[0.14em]">Integrated Scorecard Points Allocation</h2>
         <div className="grid grid-cols-6">
-          {lab.model.variables.map((item) => {
+          {model.variables.map((item) => {
             const on = item.name === variable.name
             return (
               <button
@@ -294,6 +321,19 @@ export function BinningStudio() {
       </section>
     </PageWrap>
   )
+}
+
+function featureRows(
+  features: { name: string }[],
+  variables: VariableModel[],
+): { name: string; item: VariableModel | undefined }[] {
+  const byName = new Map(variables.map((item) => [item.name, item]))
+  const selected = variables.map((item) => ({ name: item.name, item }))
+  selected.sort((a, b) => b.item.iv - a.item.iv || a.name.localeCompare(b.name))
+  const off = features
+    .filter((feature) => !byName.has(feature.name))
+    .map((feature) => ({ name: feature.name, item: undefined }))
+  return [...selected, ...off]
 }
 
 function countViolations(variable: VariableModel): number {

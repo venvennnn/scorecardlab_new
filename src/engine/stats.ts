@@ -50,18 +50,21 @@ export function offsetOf(scaling: Scaling): number {
 }
 
 /**
- * Points = offset/n − factor × WoE.
- * A row's points sum to offset − factor × Σ WoE.
- * Contribution is the −factor × WoE term.
+ * Points = offset/n + factor × β × WoE.
+ * Univariate scorecards use β = −1, so this is offset/n − factor × WoE.
+ * Logistic β (usually negative) reweights each variable so the row sum
+ * tracks the fitted log-odds of the event.
  */
 export function allocatePoints(
   woe: number,
   variableCount: number,
   scaling: Scaling,
+  beta = -1,
 ): { points: number; contribution: number } {
   const n = Math.max(1, variableCount)
   const factor = factorOf(scaling.pdo)
-  const contribution = -factor * woe
+  const weight = Number.isFinite(beta) ? beta : -1
+  const contribution = factor * weight * woe
   const points = offsetOf(scaling) / n + contribution
   return { points, contribution }
 }
