@@ -1,7 +1,7 @@
 import puppeteer from "puppeteer-core"
 import { writeFileSync } from "node:fs"
 
-const media = "/cursor/stores/bc-a3a74752-41a6-4708-b442-4b552ba21294/media"
+const media = "/opt/cursor/artifacts"
 const browser = await puppeteer.launch({
   executablePath: "/usr/bin/google-chrome",
   headless: true,
