@@ -24,40 +24,19 @@ import { DEFAULT_SETTINGS, STRICT_SETTINGS, type Dataset, type Settings } from "
 const SESSION_KEY = "scorecardlab.session.v1"
 
 export type Section = "studio" | "diagnostics" | "points" | "frontier"
+export type Phase = "splash" | "setup" | "lab"
 
-type Boot = {
-  dataset: Dataset
-  settings: Settings
-  model: ScorecardModel
-  active: string
-}
-
-function boot(): Boot {
-  const dataset = buildDemoDataset()
-  let settings: Settings = { ...DEFAULT_SETTINGS }
-  let cuts: Record<string, number[]> | undefined
-  let active = ""
+function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SESSION_KEY)
     if (raw) {
-      const saved = JSON.parse(raw) as {
-        datasetId?: string
-        settings?: Partial<Settings>
-        cuts?: Record<string, number[]>
-        active?: string
-      }
-      if (saved.settings) settings = { ...DEFAULT_SETTINGS, ...saved.settings }
-      if (saved.datasetId === dataset.id && saved.cuts) cuts = saved.cuts
-      if (saved.active) active = saved.active
+      const saved = JSON.parse(raw) as { settings?: Partial<Settings> }
+      if (saved.settings) return { ...DEFAULT_SETTINGS, ...saved.settings }
     }
   } catch {
-    settings = { ...DEFAULT_SETTINGS }
+    /* local recall is optional */
   }
-  const model = buildScorecard(dataset, settings, cuts)
-  const activeName = model.variables.some((variable) => variable.name === active)
-    ? active
-    : (model.variables[0]?.name ?? "")
-  return { dataset, settings, model, active: activeName }
+  return { ...DEFAULT_SETTINGS }
 }
 
 function download(filename: string, content: string, mime: string) {
@@ -73,30 +52,46 @@ function download(filename: string, content: string, mime: string) {
 }
 
 export function useScorecard() {
-  const initial = useState(boot)[0]
-  const [dataset, setDataset] = useState(initial.dataset)
-  const [settings, setSettings] = useState(initial.settings)
-  const [model, setModel] = useState(initial.model)
-  const [active, setActive] = useState(initial.active)
+  const [phase, setPhase] = useState<Phase>("splash")
+  const [dataset, setDataset] = useState<Dataset | null>(null)
+  const [settings, setSettings] = useState(loadSettings)
+  const [model, setModel] = useState<ScorecardModel | null>(null)
+  const [active, setActive] = useState("")
+  const [selected, setSelected] = useState<string[]>([])
   const [section, setSection] = useState<Section>("studio")
   const [status, setStatus] = useState("")
   const [slow, setSlow] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [candidates, setCandidates] = useState<string[]>([initial.dataset.target])
+  const [candidates, setCandidates] = useState<string[]>([])
   const [profitGood, setProfitGood] = useState(100)
   const [lossBad, setLossBad] = useState(500)
   const [accept1, setAccept1State] = useState(0.7)
   const [accept2, setAccept2State] = useState(0.45)
   const csvText = useRef<string | null>(null)
   const csvName = useRef("german_credit_25k")
+  const demoCuts = useRef<Record<string, number[]> | undefined>(undefined)
   const modelRef = useRef(model)
   const datasetRef = useRef(dataset)
   const settingsRef = useRef(settings)
   const activeRef = useRef(active)
+  const selectedRef = useRef(selected)
   modelRef.current = model
   datasetRef.current = dataset
   settingsRef.current = settings
   activeRef.current = active
+  selectedRef.current = selected
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY)
+      if (!raw) return
+      const saved = JSON.parse(raw) as { datasetId?: string; cuts?: Record<string, number[]>; active?: string }
+      if (saved.datasetId === "german_credit_25k" && saved.cuts) demoCuts.current = saved.cuts
+      if (saved.active) activeRef.current = saved.active
+    } catch {
+      /* optional */
+    }
+  }, [])
 
   function note(next: ScorecardModel) {
     modelRef.current = next
@@ -108,10 +103,12 @@ export function useScorecard() {
   }
 
   useEffect(() => {
+    if (!model || !dataset) return
     const cuts: Record<string, number[]> = {}
     for (const variable of model.variables) {
       cuts[variable.name] = variable.bins.slice(0, -1).map((bin) => bin.hi)
     }
+    if (dataset.id === "german_credit_25k") demoCuts.current = cuts
     try {
       localStorage.setItem(
         SESSION_KEY,
@@ -125,36 +122,70 @@ export function useScorecard() {
     } catch {
       /* local recall is optional */
     }
-  }, [model, settings, dataset.id, active])
+  }, [model, settings, dataset, active])
 
-  const ranked = useMemo(() => rankByScore(model.scores), [model])
-  const counts = useMemo(() => bookCounts(dataset.y), [dataset])
+  const ranked = useMemo(() => (model ? rankByScore(model.scores) : []), [model])
+  const counts = useMemo(
+    () => (dataset ? bookCounts(dataset.y) : { n: 0, events: 0, nonEvents: 0 }),
+    [dataset],
+  )
+  const emptyScores = useMemo(() => new Float64Array(0), [])
   const stats1 = useMemo(
-    () => economicsAtRate(model.scores, dataset.y, accept1, profitGood, lossBad, ranked, counts),
-    [model, dataset, accept1, profitGood, lossBad, ranked, counts],
+    () => economicsAtRate(model?.scores ?? emptyScores, dataset?.y ?? emptyScores, accept1, profitGood, lossBad, ranked, counts),
+    [model, dataset, accept1, profitGood, lossBad, ranked, counts, emptyScores],
   )
   const stats2 = useMemo(
-    () => economicsAtRate(model.scores, dataset.y, accept2, profitGood, lossBad, ranked, counts),
-    [model, dataset, accept2, profitGood, lossBad, ranked, counts],
+    () => economicsAtRate(model?.scores ?? emptyScores, dataset?.y ?? emptyScores, accept2, profitGood, lossBad, ranked, counts),
+    [model, dataset, accept2, profitGood, lossBad, ranked, counts, emptyScores],
   )
   const curve = useMemo(
-    () => profitCurve(model.scores, dataset.y, profitGood, lossBad, ranked, counts),
-    [model, dataset, profitGood, lossBad, ranked, counts],
+    () => profitCurve(model?.scores ?? emptyScores, dataset?.y ?? emptyScores, profitGood, lossBad, ranked, counts),
+    [model, dataset, profitGood, lossBad, ranked, counts, emptyScores],
   )
   const t1 = stats1.threshold
   const t2 = stats2.threshold
-  const activeVariable = model.variables.find((variable) => variable.name === active) ?? model.variables[0]
+  const activeVariable = model?.variables.find((variable) => variable.name === active) ?? model?.variables[0]
 
-  function commitSettings(next: Settings, rebuild: boolean) {
-    settingsRef.current = next
-    setSettings(next)
-    const built = rebuild ? buildScorecard(datasetRef.current, next) : rescale(modelRef.current, datasetRef.current, next)
+  function cutsOf(current: ScorecardModel | null): Record<string, number[]> | undefined {
+    if (!current) return datasetRef.current?.id === "german_credit_25k" ? demoCuts.current : undefined
+    const cuts: Record<string, number[]> = {}
+    for (const variable of current.variables) {
+      cuts[variable.name] = variable.bins.slice(0, -1).map((bin) => bin.hi)
+    }
+    return cuts
+  }
+
+  function adopt(built: ScorecardModel, names: string[]) {
+    selectedRef.current = names
+    setSelected(names)
     note(built)
     if (!built.variables.some((variable) => variable.name === activeRef.current)) {
       const name = built.variables[0]?.name ?? ""
       activeRef.current = name
       setActive(name)
     }
+  }
+
+  function rebuild(nextDataset: Dataset, names: string[], nextSettings = settingsRef.current, cuts?: Record<string, number[]>) {
+    const built = buildScorecard(nextDataset, nextSettings, cuts ?? cutsOf(modelRef.current), names)
+    adopt(built, names)
+  }
+
+  function commitSettings(next: Settings, rebuildBins: boolean) {
+    const currentDataset = datasetRef.current
+    const currentModel = modelRef.current
+    if (!currentDataset || !currentModel) {
+      settingsRef.current = next
+      setSettings(next)
+      return
+    }
+    settingsRef.current = next
+    setSettings(next)
+    const names = selectedRef.current
+    const built = rebuildBins
+      ? buildScorecard(currentDataset, next, undefined, names)
+      : rescale(currentModel, currentDataset, next)
+    adopt(built, names)
   }
 
   function updateSetting(key: keyof Settings, value: number) {
@@ -170,29 +201,33 @@ export function useScorecard() {
     if (structural) setStatus("Bins rebuilt for the new constraint.")
   }
 
+  function applyDataset(next: Dataset, names?: string[], cuts?: Record<string, number[]>) {
+    datasetRef.current = next
+    setDataset(next)
+    const selectedNames = names && names.length > 0 ? names : next.features.map((feature) => feature.name)
+    rebuild(next, selectedNames, settingsRef.current, cuts)
+    setStatus(`Loaded ${next.name}.`)
+  }
+
   function onFile(file: File) {
-    void file.text().then((text) => {
-      csvText.current = text
-      csvName.current = file.name.replace(/\.csv$/i, "") || "upload"
-      const result = ingestCsv(text, csvName.current)
-      if (!result.ok) {
-        setError(result.issues.map((issue) => issue.message).join(" "))
-        return
-      }
-      setError(null)
-      setCandidates(result.binaryCandidates)
-      datasetRef.current = result.dataset
-      setDataset(result.dataset)
-      const built = buildScorecard(result.dataset, settingsRef.current)
-      note(built)
-      const name = built.variables[0]?.name ?? ""
-      activeRef.current = name
-      setActive(name)
-      setSection("studio")
-      setStatus(`Loaded ${result.dataset.name}.`)
-    }).catch(() => {
-      setError("The file could not be read.")
-    })
+    void file
+      .text()
+      .then((text) => {
+        csvText.current = text
+        csvName.current = file.name.replace(/\.csv$/i, "") || "upload"
+        const result = ingestCsv(text, csvName.current)
+        if (!result.ok) {
+          setError(result.issues.map((issue) => issue.message).join(" "))
+          return
+        }
+        setError(null)
+        setCandidates(result.binaryCandidates)
+        setPhase("setup")
+        applyDataset(result.dataset)
+      })
+      .catch(() => {
+        setError("The file could not be read.")
+      })
   }
 
   function onTarget(target: string) {
@@ -204,13 +239,21 @@ export function useScorecard() {
       return
     }
     setError(null)
-    datasetRef.current = result.dataset
-    setDataset(result.dataset)
-    const built = buildScorecard(result.dataset, settingsRef.current)
-    note(built)
-    const name = built.variables[0]?.name ?? ""
-    activeRef.current = name
-    setActive(name)
+    applyDataset(result.dataset, selectedRef.current.filter((name) => name !== target))
+  }
+
+  function loadDemo() {
+    csvText.current = null
+    csvName.current = "german_credit_25k"
+    const next = buildDemoDataset()
+    setError(null)
+    setCandidates([next.target])
+    setPhase("setup")
+    applyDataset(
+      next,
+      next.features.map((feature) => feature.name),
+      demoCuts.current,
+    )
   }
 
   function restoreDemo() {
@@ -219,22 +262,45 @@ export function useScorecard() {
     const next = buildDemoDataset()
     setError(null)
     setCandidates([next.target])
-    datasetRef.current = next
-    setDataset(next)
-    const built = buildScorecard(next, settingsRef.current)
-    note(built)
-    const name = built.variables[0]?.name ?? ""
-    activeRef.current = name
-    setActive(name)
+    applyDataset(
+      next,
+      next.features.map((feature) => feature.name),
+      demoCuts.current,
+    )
+    setPhase("lab")
     setSection("studio")
-    setStatus("Restored german_credit_25k.")
+  }
+
+  function finishSplash() {
+    setPhase("setup")
+  }
+
+  function enterLab() {
+    if (!datasetRef.current || selectedRef.current.length === 0) return
+    setPhase("lab")
+    setSection("studio")
+  }
+
+  function toggleFeature(name: string) {
+    const current = datasetRef.current
+    if (!current) return
+    const on = selectedRef.current.includes(name)
+    const next = on ? selectedRef.current.filter((item) => item !== name) : [...selectedRef.current, name]
+    if (next.length === 0) {
+      setStatus("Keep at least one feature.")
+      return
+    }
+    rebuild(current, next)
+    setStatus(on ? `Dropped ${name}. Logistic refit.` : `Added ${name}. Logistic refit.`)
   }
 
   return {
+    phase,
     dataset,
     settings,
     model,
     active,
+    selected,
     activeVariable,
     section,
     status,
@@ -269,6 +335,13 @@ export function useScorecard() {
     onFile,
     onTarget,
     restoreDemo,
+    loadDemo,
+    finishSplash,
+    enterLab,
+    openSetup() {
+      setPhase("setup")
+    },
+    toggleFeature,
     updateSetting,
     applyPreset(which: "defaults" | "strict") {
       const next = which === "strict" ? { ...STRICT_SETTINGS } : { ...DEFAULT_SETTINGS }
@@ -276,12 +349,18 @@ export function useScorecard() {
       setStatus(which === "strict" ? "Stricter minimum-bin preset." : "Spec defaults restored.")
     },
     drag(index: number, value: number) {
-      const next = dragCut(modelRef.current, datasetRef.current, settingsRef.current, activeRef.current, index, value)
+      const currentModel = modelRef.current
+      const currentDataset = datasetRef.current
+      if (!currentModel || !currentDataset) return
+      const next = dragCut(currentModel, currentDataset, settingsRef.current, activeRef.current, index, value)
       note(next)
       setStatus("")
     },
     merge() {
-      const next = applyMerge(modelRef.current, datasetRef.current, settingsRef.current, activeRef.current)
+      const currentModel = modelRef.current
+      const currentDataset = datasetRef.current
+      if (!currentModel || !currentDataset) return
+      const next = applyMerge(currentModel, currentDataset, settingsRef.current, activeRef.current)
       if (!next) {
         setStatus("Already at two bins.")
         return
@@ -290,7 +369,10 @@ export function useScorecard() {
       setStatus("Merged the closest adjacent bins.")
     },
     split() {
-      const next = applySplit(modelRef.current, datasetRef.current, settingsRef.current, activeRef.current)
+      const currentModel = modelRef.current
+      const currentDataset = datasetRef.current
+      if (!currentModel || !currentDataset) return
+      const next = applySplit(currentModel, currentDataset, settingsRef.current, activeRef.current)
       if (!next) {
         setStatus("No feasible split under the minimum bin size.")
         return
@@ -299,26 +381,37 @@ export function useScorecard() {
       setStatus("Split the widest feasible bin.")
     },
     isotonic() {
-      note(applyIsotonic(modelRef.current, datasetRef.current, settingsRef.current, activeRef.current))
+      const currentModel = modelRef.current
+      const currentDataset = datasetRef.current
+      if (!currentModel || !currentDataset) return
+      note(applyIsotonic(currentModel, currentDataset, settingsRef.current, activeRef.current))
       setStatus("Isotonic PAV partition applied.")
     },
     autoBin() {
-      note(applyAuto(modelRef.current, datasetRef.current, settingsRef.current, activeRef.current))
+      const currentModel = modelRef.current
+      const currentDataset = datasetRef.current
+      if (!currentModel || !currentDataset) return
+      note(applyAuto(currentModel, currentDataset, settingsRef.current, activeRef.current))
       setStatus("Auto-bin applied.")
     },
     exportJson() {
+      if (!dataset || !model) return
       download(`${dataset.name}-cuts.json`, cutsJson(dataset, settings, model), "application/json")
     },
     exportCutsCsv() {
+      if (!dataset || !model) return
       download(`${dataset.name}-cuts.csv`, cutsCsv(model), "text/csv")
     },
     exportPoints() {
+      if (!dataset || !model) return
       download(`${dataset.name}-points.csv`, pointsCsv(model), "text/csv")
     },
     exportPython() {
+      if (!dataset || !model) return
       download(`${dataset.name}-scorecard.py`, pythonSnippet(dataset, model), "text/x-python")
     },
     exportDossier() {
+      if (!dataset || !model) return
       download(`${dataset.name}-session-record.json`, sessionRecord(dataset, settings, model), "application/json")
     },
   }

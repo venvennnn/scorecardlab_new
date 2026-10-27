@@ -8,6 +8,7 @@ import {
   segmentOf,
   splitOnce,
 } from "./binning"
+import { fitLogistic } from "./logistic"
 import { allocatePoints, giniFromGroups, histogram, separation, woeAndIv, type HistBin } from "./stats"
 import type { Dataset, FineCell, Range, Settings } from "./types"
 
@@ -50,6 +51,7 @@ export type VariableModel = {
   iv: number
   gini: number
   maxDivergence: number
+  beta: number
 }
 
 export type KsPoint = { t: number; events: number; nonEvents: number }
@@ -63,6 +65,7 @@ export type ScorecardModel = {
   ksAt: number
   curve: KsPoint[]
   histogram: { min: number; max: number; bins: HistBin[] }
+  intercept: number
   ms: number
 }
 
@@ -191,6 +194,7 @@ function materialize(prep: Prepared, ranges: Range[], settings: Settings, variab
     iv,
     gini: uni.gini,
     maxDivergence: woes.length ? Math.max(...woes) - Math.min(...woes) : 0,
+    beta: -1,
   }
 }
 
@@ -261,12 +265,63 @@ function scoreOf(variables: VariableModel[], rowCount: number): Float64Array {
   return scores
 }
 
-function finish(dataset: Dataset, variables: VariableModel[], started: number): ScorecardModel {
-  const scores = scoreOf(variables, dataset.rowCount)
+function woeAt(variable: VariableModel, value: number): number {
+  if (Number.isNaN(value)) {
+    if (variable.missingBin) return variable.missingBin.woe
+    if (variable.foldedInto != null) return variable.bins[variable.foldedInto]?.woe ?? 0
+    return variable.bins[variable.bins.length - 1]?.woe ?? 0
+  }
+  const cuts = variable.bins.slice(0, -1).map((bin) => bin.hi)
+  let lo = 0
+  let hi = cuts.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (cuts[mid] >= value) hi = mid
+    else lo = mid + 1
+  }
+  return variable.bins[lo]?.woe ?? 0
+}
+
+function remapPoints(variable: VariableModel, settings: Settings, variableCount: number, beta: number): VariableModel {
+  const bins = variable.bins.map((bin) => {
+    const allocated = allocatePoints(bin.woe, variableCount, settings, beta)
+    return { ...bin, points: allocated.points, contribution: allocated.contribution }
+  })
+  let missingBin = variable.missingBin
+  if (missingBin) {
+    const allocated = allocatePoints(missingBin.woe, variableCount, settings, beta)
+    missingBin = { ...missingBin, points: allocated.points, contribution: allocated.contribution }
+  }
+  return { ...variable, bins, missingBin, beta }
+}
+
+function withLogistic(
+  variables: VariableModel[],
+  dataset: Dataset,
+  settings: Settings,
+): { variables: VariableModel[]; intercept: number } {
+  const n = dataset.rowCount
+  const p = variables.length
+  if (p === 0 || n === 0) return { variables, intercept: 0 }
+  const X = new Float64Array(n * p)
+  for (let j = 0; j < p; j++) {
+    const values = variables[j].values
+    for (let i = 0; i < n; i++) X[i * p + j] = woeAt(variables[j], values[i])
+  }
+  const fit = fitLogistic(X, n, p, dataset.y)
+  return {
+    intercept: fit.intercept,
+    variables: variables.map((variable, j) => remapPoints(variable, settings, p, fit.coef[j] ?? -1)),
+  }
+}
+
+function finish(dataset: Dataset, variables: VariableModel[], settings: Settings, started: number): ScorecardModel {
+  const fitted = withLogistic(variables, dataset, settings)
+  const scores = scoreOf(fitted.variables, dataset.rowCount)
   const sep = separation(scores, dataset.y)
   const hist = histogram(scores, dataset.y)
   return {
-    variables,
+    variables: fitted.variables,
     scores,
     ks: sep.metrics.ks,
     auc: sep.metrics.auc,
@@ -274,56 +329,52 @@ function finish(dataset: Dataset, variables: VariableModel[], started: number): 
     ksAt: sep.metrics.ksAt,
     curve: sep.curve,
     histogram: hist,
+    intercept: fitted.intercept,
     ms: performance.now() - started,
   }
 }
 
-export function buildScorecard(dataset: Dataset, settings: Settings, cuts?: Record<string, number[]>): ScorecardModel {
+export function buildScorecard(
+  dataset: Dataset,
+  settings: Settings,
+  cuts?: Record<string, number[]>,
+  selected?: string[],
+): ScorecardModel {
   const started = performance.now()
   const prepared = prepareAll(dataset)
-  const ranked = prepared
-    .map((prep) => binPrepared(prep, settings, Math.min(6, prepared.length), dataset.rowCount))
-    .sort((a, b) => b.iv - a.iv || a.name.localeCompare(b.name))
-    .slice(0, 6)
-  const variableCount = ranked.length
-  const variables = ranked.map((variable) => {
-    const want = cuts?.[variable.name]
-    if (!want) {
-      return binPrepared(
-        {
-          name: variable.name,
-          values: variable.values,
-          fine: variable.fine,
-          missing: variable.missing,
-          direction: variable.direction,
-        },
-        settings,
-        variableCount,
-        dataset.rowCount,
-      )
-    }
-    return binPrepared(
-      {
+  const byName = new Map(prepared.map((prep) => [prep.name, prep]))
+  let pool: Prepared[]
+  if (selected && selected.length > 0) {
+    pool = selected.map((name) => byName.get(name)).filter((prep): prep is Prepared => Boolean(prep))
+  } else {
+    pool = prepared
+      .map((prep) => binPrepared(prep, settings, Math.min(6, prepared.length), dataset.rowCount, cuts?.[prep.name]))
+      .sort((a, b) => b.iv - a.iv || a.name.localeCompare(b.name))
+      .slice(0, 6)
+      .map((variable) => ({
         name: variable.name,
         values: variable.values,
         fine: variable.fine,
         missing: variable.missing,
         direction: variable.direction,
-      },
-      settings,
-      variableCount,
-      dataset.rowCount,
-      want,
-    )
-  })
-  variables.sort((a, b) => b.iv - a.iv || a.name.localeCompare(b.name))
-  return finish(dataset, variables, started)
+      }))
+  }
+  if (pool.length === 0) pool = prepared.slice(0, 1)
+  const variableCount = pool.length
+  const variables = pool.map((prep) => binPrepared(prep, settings, variableCount, dataset.rowCount, cuts?.[prep.name]))
+  if (!selected) variables.sort((a, b) => b.iv - a.iv || a.name.localeCompare(b.name))
+  return finish(dataset, variables, settings, started)
 }
 
-function replaceVariable(model: ScorecardModel, next: VariableModel, dataset: Dataset, started: number): ScorecardModel {
+function replaceVariable(
+  model: ScorecardModel,
+  next: VariableModel,
+  dataset: Dataset,
+  settings: Settings,
+  started: number,
+): ScorecardModel {
   const variables = model.variables.map((variable) => (variable.name === next.name ? next : variable))
-  variables.sort((a, b) => b.iv - a.iv || a.name.localeCompare(b.name))
-  return finish(dataset, variables, started)
+  return finish(dataset, variables, settings, started)
 }
 
 function prepOf(variable: VariableModel): Prepared {
@@ -354,7 +405,7 @@ export function dragCut(
   const ranges = projectRanges(variable.fine, cuts, variable.direction, minCount)
   if (!ranges) return { ...model, ms: performance.now() - started }
   const next = materialize(prepOf(variable), ranges, settings, model.variables.length, dataset.rowCount)
-  return replaceVariable(model, next, dataset, started)
+  return replaceVariable(model, next, dataset, settings, started)
 }
 
 export function applyMerge(model: ScorecardModel, dataset: Dataset, settings: Settings, name: string): ScorecardModel | null {
@@ -364,7 +415,7 @@ export function applyMerge(model: ScorecardModel, dataset: Dataset, settings: Se
   if (!ranges) return null
   const started = performance.now()
   const next = materialize(prepOf(variable), ranges, settings, model.variables.length, dataset.rowCount)
-  return replaceVariable(model, next, dataset, started)
+  return replaceVariable(model, next, dataset, settings, started)
 }
 
 export function applySplit(model: ScorecardModel, dataset: Dataset, settings: Settings, name: string): ScorecardModel | null {
@@ -380,7 +431,7 @@ export function applySplit(model: ScorecardModel, dataset: Dataset, settings: Se
   if (!ranges) return null
   const started = performance.now()
   const next = materialize(prepOf(variable), ranges, settings, model.variables.length, dataset.rowCount)
-  return replaceVariable(model, next, dataset, started)
+  return replaceVariable(model, next, dataset, settings, started)
 }
 
 export function applyIsotonic(model: ScorecardModel, dataset: Dataset, settings: Settings, name: string): ScorecardModel {
@@ -394,7 +445,7 @@ export function applyIsotonic(model: ScorecardModel, dataset: Dataset, settings:
     settings.maxBins,
   )
   const next = materialize(prepOf(variable), ranges, settings, model.variables.length, dataset.rowCount)
-  return replaceVariable(model, next, dataset, started)
+  return replaceVariable(model, next, dataset, settings, started)
 }
 
 export function applyAuto(model: ScorecardModel, dataset: Dataset, settings: Settings, name: string): ScorecardModel {
@@ -410,7 +461,7 @@ export function applyAuto(model: ScorecardModel, dataset: Dataset, settings: Set
     targetBins(settings),
   )
   const next = materialize(prepOf(variable), ranges, settings, model.variables.length, dataset.rowCount)
-  return replaceVariable(model, next, dataset, started)
+  return replaceVariable(model, next, dataset, settings, started)
 }
 
 export function rescale(model: ScorecardModel, dataset: Dataset, settings: Settings): ScorecardModel {
@@ -418,5 +469,5 @@ export function rescale(model: ScorecardModel, dataset: Dataset, settings: Setti
   const variables = model.variables.map((variable) =>
     materialize(prepOf(variable), variable.ranges, settings, model.variables.length, dataset.rowCount),
   )
-  return finish(dataset, variables, started)
+  return finish(dataset, variables, settings, started)
 }

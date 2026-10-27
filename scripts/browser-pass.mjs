@@ -1,7 +1,7 @@
 import puppeteer from "puppeteer-core"
 import { writeFileSync } from "node:fs"
 
-const media = "/cursor/stores/bc-a3a74752-41a6-4708-b442-4b552ba21294/media"
+const media = "/opt/cursor/artifacts"
 const browser = await puppeteer.launch({
   executablePath: "/usr/bin/google-chrome",
   headless: true,
@@ -22,7 +22,25 @@ function note(ok, message) {
 }
 
 await page.goto("http://localhost:5173/", { waitUntil: "networkidle0", timeout: 30000 })
-await page.waitForSelector("[data-testid='active-name']")
+const splash = await page.$("[data-testid='splash']")
+if (splash) {
+  const title = await page.$eval("[data-testid='splash']", (el) => el.textContent.trim())
+  note(title.includes("Scorecard Lab"), `splash title ${title}`)
+  await splash.click()
+} else {
+  note(true, "splash already finished")
+}
+await page.waitForSelector("[data-testid='setup']")
+await page.click("[data-testid='use-demo']")
+await page.waitForSelector("[data-testid='setup-continue']", { timeout: 30000 })
+const setupAuc = await page.$eval("[data-testid='setup-auc']", (el) => el.textContent)
+note(/\d/.test(setupAuc), `setup auc ${setupAuc.replace(/\s+/g, " ")}`)
+const toggledOff = await page.$("[data-testid='feature-toggle-total_credit_lines']")
+note(Boolean(toggledOff), "setup has feature toggles")
+if (toggledOff) await toggledOff.click()
+await new Promise((r) => setTimeout(r, 400))
+await page.click("[data-testid='setup-continue']")
+await page.waitForSelector("[data-testid='active-name']", { timeout: 30000 })
 await page.waitForFunction(() => document.fonts && document.fonts.status === "loaded")
 await new Promise((r) => setTimeout(r, 400))
 
@@ -77,6 +95,19 @@ const isoRows = await page.$$eval("[data-testid^='ledger-row-']", (rows) => rows
 note(isoRows >= 2, `isotonic rows ${isoRows}`)
 
 const ksBefore = await page.$eval("[data-testid='model-ks']", (el) => el.textContent.trim())
+const studioBad = await page.$eval("[data-testid='studio-bad-rate']", (el) => el.textContent.trim())
+note(/%/.test(studioBad), `studio bad rate ${studioBad}`)
+const aucBeforeToggle = await page.$eval("[data-testid='model-auc']", (el) => el.textContent.trim())
+const linesToggle = await page.$("[data-testid='feature-toggle-annual_income_log']")
+note(Boolean(linesToggle), "studio can toggle features")
+if (linesToggle) {
+  await linesToggle.click()
+  await new Promise((r) => setTimeout(r, 400))
+  const aucAfterToggle = await page.$eval("[data-testid='model-auc']", (el) => el.textContent.trim())
+  note(aucAfterToggle.length > 0, `auc after feature toggle ${aucBeforeToggle} -> ${aucAfterToggle}`)
+  await linesToggle.click()
+  await new Promise((r) => setTimeout(r, 400))
+}
 await page.click("[data-testid='nav-diagnostics']")
 await page.waitForSelector("[data-testid='diag-ks']")
 const diag = await page.$eval("[data-testid='diag-ks']", (el) => el.textContent)
@@ -100,6 +131,8 @@ const uploadLabel = await page.$eval("[data-testid='upload-csv']", (el) => el.te
 note(uploadLabel.includes("Upload CSV"), `upload control ${uploadLabel}`)
 const approvalBefore = await page.$eval("[data-testid='approval-a']", (el) => el.textContent.trim())
 const profitBefore = await page.$eval("[data-testid='profit-a']", (el) => el.textContent.trim())
+const badRate = await page.$eval("[data-testid='bad-rate-a']", (el) => el.textContent.trim())
+note(/%/.test(badRate), `bad rate next to profit ${badRate}`)
 const deltaBefore = await page.$eval("[data-testid='profit-delta-a']", (el) => el.textContent.trim())
 note(deltaBefore.length > 0, `profit delta shown ${deltaBefore}`)
 const slider = await page.$("[data-testid='acceptance-a']")
@@ -137,6 +170,11 @@ writeFileSync("/tmp/scorecard-ok.csv", lines.join("\n"))
 await page.click("[data-testid='nav-studio']")
 const input = await page.$("[data-testid='file-input']")
 await input.uploadFile("/tmp/scorecard-ok.csv")
+await page.waitForSelector("[data-testid='setup']")
+await page.waitForSelector("[data-testid='setup-continue']", { timeout: 15000 })
+const uploadedName = await page.$eval("[data-testid='setup']", (el) => el.innerText)
+note(/scorecard-ok/.test(uploadedName), "setup shows the uploaded book")
+await page.click("[data-testid='setup-continue']")
 await page.waitForFunction(() => document.querySelector("[data-testid='dataset-button']")?.textContent?.includes("scorecard-ok"))
 const uploadedIv = await page.$eval("[data-testid='metric-iv']", (el) => el.textContent)
 note(/\d/.test(uploadedIv), `uploaded iv ${uploadedIv.replace(/\s+/g, " ")}`)

@@ -5,6 +5,7 @@ import { ProfitCurve, Silhouette } from "./figures"
 
 export function Frontier() {
   const lab = useLab()
+  if (!lab.dataset || !lab.model) return null
   const min = lab.model.histogram.min
   const max = lab.model.histogram.max
   const span = Math.max(1e-6, max - min)
@@ -50,7 +51,7 @@ export function Frontier() {
             <span className={shift >= 0 ? "text-primary" : "text-tertiary"} data-testid="profit-shift-value">
               {fmtDelta(shift)}
             </span>
-            . Accepted event rate moves from {fmtPct(lab.stats1.eventRate)} to {fmtPct(lab.stats2.eventRate)}.
+            . Bad rate moves from {fmtPct(lab.stats1.eventRate)} to {fmtPct(lab.stats2.eventRate)}.
           </p>
         </div>
         <section className="mt-3 border border-outline-variant bg-surface-container-lowest p-3">
@@ -152,15 +153,15 @@ function PolicyCard({
           </dd>
         </div>
         <div>
-          <dt className="font-label-caps text-[10px] tracking-[0.08em] text-secondary">Accepted event rate</dt>
-          <dd data-testid={`event-rate-${testPrefix}`} className="font-numeric-data text-[1.15rem] text-tertiary">
-            {fmtPct(stats.eventRate)}
-          </dd>
-        </div>
-        <div>
           <dt className="font-label-caps text-[10px] tracking-[0.08em] text-secondary">Profit</dt>
           <dd data-testid={`profit-${testPrefix}`} className="font-numeric-data text-[1.15rem]">
             {fmtInt(stats.profit)}
+          </dd>
+        </div>
+        <div>
+          <dt className="font-label-caps text-[10px] tracking-[0.08em] text-secondary">Bad rate</dt>
+          <dd data-testid={`bad-rate-${testPrefix}`} className="font-numeric-data text-[1.15rem] text-tertiary">
+            {fmtPct(stats.eventRate)}
           </dd>
         </div>
       </dl>

@@ -27,6 +27,7 @@ export function Header() {
     return () => window.removeEventListener("mousedown", onDown)
   }, [])
 
+  if (!lab.dataset || !lab.model) return null
   const ms = lab.model.ms < 1 ? "<1 ms" : `${Math.round(lab.model.ms)} ms`
 
   return (
@@ -48,7 +49,7 @@ export function Header() {
             >
               <span className="material-symbols-outlined text-[14px] text-primary">upload</span>
               <span className="truncate">
-                DATA <span className="text-on-surface">{lab.dataset.name}</span>
+                DATA <span className="text-on-surface">{lab.dataset?.name ?? "—"}</span>
               </span>
             </button>
             <span aria-hidden className="hidden sm:inline">
@@ -59,7 +60,7 @@ export function Header() {
               {lab.candidates.length > 1 ? (
                 <select
                   data-testid="target-select"
-                  value={lab.dataset.target}
+                  value={lab.dataset?.target ?? ""}
                   onChange={(event) => lab.onTarget(event.target.value)}
                   className="bg-transparent font-numeric-data text-[11px] text-on-surface outline-none"
                 >
@@ -69,7 +70,7 @@ export function Header() {
                 </select>
               ) : (
                 <span data-testid="target-name" className="text-on-surface">
-                  {lab.dataset.target}
+                  {lab.dataset?.target}
                 </span>
               )}
             </span>
@@ -95,6 +96,14 @@ export function Header() {
           <div className="flex shrink-0 items-center gap-3" ref={menuRef}>
             <button
               type="button"
+              data-testid="change-data"
+              className="font-body-sm text-[13px] text-secondary hover:text-on-surface"
+              onClick={lab.openSetup}
+            >
+              Change data
+            </button>
+            <button
+              type="button"
               data-testid="upload-csv"
               className="inline-flex items-center gap-1 font-body-sm text-[13px] text-secondary hover:text-on-surface"
               title="Upload a UTF-8 CSV. Numeric columns are binned; pick a binary target."
@@ -103,7 +112,7 @@ export function Header() {
               <span className="material-symbols-outlined text-[16px]">upload</span>
               Upload CSV
             </button>
-            {lab.dataset.id !== "german_credit_25k" && (
+            {lab.dataset?.id !== "german_credit_25k" && (
               <button
                 type="button"
                 data-testid="restore-demo"
@@ -227,7 +236,7 @@ export function Footer() {
         <span className="hidden sm:inline">Architecture: Swiss Modern Functionalist</span>
         <span className="inline-flex items-center gap-2 font-numeric-data text-[11px] text-on-surface">
           <i className="h-1.5 w-1.5 rounded-[999px] bg-primary" />
-          {lab.dataset.name}
+          {lab.dataset?.name}
         </span>
       </div>
     </footer>

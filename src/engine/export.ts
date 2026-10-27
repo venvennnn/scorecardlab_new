@@ -15,6 +15,7 @@ function variablePayload(variable: VariableModel) {
     monotonicity: variable.monotonicity,
     iv: variable.iv,
     gini: variable.gini,
+    beta: variable.beta,
     maxDivergence: variable.maxDivergence,
     cuts: variable.bins.slice(0, -1).map((bin) => bin.hi),
     bins: variable.bins.map((bin, index) => ({
@@ -46,6 +47,7 @@ export function cutsJson(dataset: Dataset, settings: Settings, model: ScorecardM
         laplace: settings.laplace,
       },
       metrics: { ks: model.ks, auc: model.auc, gini: model.gini },
+      intercept: model.intercept,
       variables: model.variables.map(variablePayload),
     },
     null,
@@ -94,8 +96,8 @@ export function pythonSnippet(dataset: Dataset, model: ScorecardModel): string {
   }
   return `"""Apply ScorecardLab cuts and points for ${dataset.name}.
 
-Higher points are riskier: points = offset/n - factor * WoE.
-This snippet reproduces the current bins. It is not a certification.
+Higher points are riskier: points = offset/n + factor * beta * WoE.
+Logistic beta is fit on the selected WoE bins. This snippet is not a certification.
 """
 
 CUTS = ${JSON.stringify(cuts, null, 2)}
@@ -135,6 +137,7 @@ export function sessionRecord(dataset: Dataset, settings: Settings, model: Score
         laplace: settings.laplace,
       },
       metrics: { ks: model.ks, auc: model.auc, gini: model.gini },
+      intercept: model.intercept,
       variables: model.variables.map(variablePayload),
     },
     null,
